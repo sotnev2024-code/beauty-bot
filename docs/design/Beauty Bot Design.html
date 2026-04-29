@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beauty Bot — Design Phase 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; }
+  body { font-family: 'Manrope', -apple-system, system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="scenes/phone-shell.jsx"></script>
+<script type="text/babel" src="scenes/sitemap.jsx"></script>
+<script type="text/babel" src="scenes/onboarding-warm.jsx"></script>
+<script type="text/babel" src="scenes/onboarding-rose.jsx"></script>
+<script type="text/babel" src="scenes/onboarding-graphite.jsx"></script>
+<script type="text/babel" src="scenes/onboarding-hybrid.jsx"></script>
+<script type="text/babel" src="scenes/tone-and-system.jsx"></script>
+<script type="text/babel" src="scenes/funnel-builder.jsx"></script>
+<script type="text/babel" src="scenes/calendar.jsx"></script>
+<script type="text/babel" src="scenes/clients.jsx"></script>
+<script type="text/babel" src="scenes/settings-portfolio.jsx"></script>
+<script type="text/babel" src="scenes/onboarding-and-dashboard.jsx"></script>
+<script type="text/babel" src="scenes/pricing.jsx"></script>
+<script type="text/babel" src="scenes/chat-business.jsx"></script>
+<script type="text/babel" src="scenes/analytics.jsx"></script>
+
+<script type="text/babel">
+  function App() {
+    return (
+      <DesignCanvas>
+        {/* 1. Design system overview */}
+        <DCSection
+          id="system"
+          title="Дизайн-система · направления"
+          subtitle="Гибрид B+C — рекомендованный. Остальные оставлены для сравнения.">
+          <DCArtboard id="hybrid-tokens" label="D · Коралл + сетка ★" width={520} height={680}>
+            <SystemCardHybrid />
+          </DCArtboard>
+          <DCArtboard id="rose-tokens" label="B · Мягкий розовый" width={520} height={680}>
+            <SystemCardRose />
+          </DCArtboard>
+          <DCArtboard id="graphite-tokens" label="C · Графитовый минимал" width={520} height={680}>
+            <SystemCardGraphite />
+          </DCArtboard>
+          <DCArtboard id="warm-tokens" label="A · Тёплая карамель" width={520} height={680}>
+            <SystemCardWarm />
+          </DCArtboard>
+        </DCSection>
+
+        {/* 2. Sitemap */}
+        <DCSection
+          id="sitemap"
+          title="Карта экранов"
+          subtitle="Высокоуровневая структура Mini App. Стрелки = основные переходы.">
+          <DCArtboard id="map" label="Sitemap · все разделы" width={1680} height={1040}>
+            <Sitemap />
+          </DCArtboard>
+        </DCSection>
+
+        {/* 3. Onboarding flows */}
+        <DCSection
+          id="onboarding-hybrid"
+          title="Onboarding · D · Коралл + сетка ★"
+          subtitle="Рекомендованный гибрид B+C: тёплый акцент сохранён, структура взрослая. 7 экранов потока.">
+          {hybridOnboardingArtboards()}
+        </DCSection>
+
+        <DCSection
+          id="onboarding-warm"
+          title="Onboarding · A · Тёплая карамель"
+          subtitle="Альтернатива для сравнения.">
+          {warmOnboardingArtboards()}
+        </DCSection>
+
+        <DCSection
+          id="onboarding-rose"
+          title="Onboarding · B · Мягкий розовый, эмодзи-форвард"
+          subtitle="Тот же флоу, более тёплая подача. Больше эмодзи, скруглённые карточки, иллюстративные акценты.">
+          {roseOnboardingArtboards()}
+        </DCSection>
+
+        <DCSection
+          id="onboarding-graphite"
+          title="Onboarding · C · Графитовый минимал"
+          subtitle="Сдержанный технический стиль. Чек-лист на одном экране, минимум декора.">
+          {graphiteOnboardingArtboards()}
+        </DCSection>
+
+        {/* Funnel Builder — самый сложный экран */}
+        <DCSection
+          id="funnel"
+          title="Конструктор воронки · ключевой экран"
+          subtitle="Сердце продукта. Шесть состояний экрана + кликабельный прототип переключения между ними. Дизайн-токены: D · Коралл + сетка.">
+          <DCArtboard id="fnl-proto" label="Прототип · кликабельный" width={920} height={760}>
+            <FunnelPrototype />
+          </DCArtboard>
+          <DCArtboard id="fnl-list" label="1 · Список воронок" width={320} height={660}>
+            <FunnelList />
+          </DCArtboard>
+          <DCArtboard id="fnl-presets" label="2 · Пресеты" width={320} height={660}>
+            <FunnelPresets />
+          </DCArtboard>
+          <DCArtboard id="fnl-editor" label="3 · Редактор воронки ★" width={320} height={660}>
+            <FunnelEditor activeId={2} />
+          </DCArtboard>
+          <DCArtboard id="fnl-sheet" label="4 · Карточка шага" width={320} height={660}>
+            <StepSheet />
+          </DCArtboard>
+          <DCArtboard id="fnl-test" label="5 · Тест-режим" width={320} height={660}>
+            <FunnelTest />
+          </DCArtboard>
+          <DCArtboard id="fnl-branch" label="6 · Развилка / условие" width={320} height={660}>
+            <FunnelBranch />
+          </DCArtboard>
+        </DCSection>
+
+        {/* Calendar */}
+        <DCSection
+          id="calendar"
+          title="Календарь записей"
+          subtitle="День — главный режим. Неделя и месяц — обзор. Карточка записи, перенос, ручное добавление.">
+          <DCArtboard id="cal-proto" label="Прототип · кликабельный" width={920} height={760}>
+            <CalendarPrototype />
+          </DCArtboard>
+          <DCArtboard id="cal-day" label="1 · День ★" width={320} height={660}>
+            <CalDay />
+          </DCArtboard>
+          <DCArtboard id="cal-week" label="2 · Неделя" width={320} height={660}>
+            <CalWeek />
+          </DCArtboard>
+          <DCArtboard id="cal-month" label="3 · Месяц · heatmap" width={320} height={660}>
+            <CalMonth />
+          </DCArtboard>
+          <DCArtboard id="cal-sheet" label="4 · Карточка записи" width={320} height={660}>
+            <BookingSheet />
+          </DCArtboard>
+          <DCArtboard id="cal-resched" label="5 · Перенос" width={320} height={660}>
+            <Reschedule />
+          </DCArtboard>
+          <DCArtboard id="cal-add" label="6 · Новая запись (вручную)" width={320} height={660}>
+            <AddBooking />
+          </DCArtboard>
+        </DCSection>
+
+        {/* Clients */}
+        <DCSection
+          id="clients"
+          title="Карточка клиента · мини-CRM"
+          subtitle="База, карточка, чат с перехватом, заметки/теги, авто-сегменты, пустое состояние.">
+          <DCArtboard id="cl-proto" label="Прототип · кликабельный" width={920} height={760}>
+            <ClientPrototype />
+          </DCArtboard>
+          <DCArtboard id="cl-list" label="1 · База клиентов" width={320} height={660}>
+            <ClientList />
+          </DCArtboard>
+          <DCArtboard id="cl-card" label="2 · Карточка ★" width={320} height={660}>
+            <ClientCard />
+          </DCArtboard>
+          <DCArtboard id="cl-chat" label="3 · Чат + перехват" width={320} height={660}>
+            <ClientChat />
+          </DCArtboard>
+          <DCArtboard id="cl-note" label="4 · Заметка / теги" width={320} height={660}>
+            <NoteEdit />
+          </DCArtboard>
+          <DCArtboard id="cl-seg" label="5 · Сегменты" width={320} height={660}>
+            <ClientSegments />
+          </DCArtboard>
+          <DCArtboard id="cl-empty" label="6 · Пустое состояние" width={320} height={660}>
+            <ClientEmpty />
+          </DCArtboard>
+        </DCSection>
+
+        {/* Settings + Portfolio */}
+        <DCSection
+          id="settings"
+          title="Настройки бота + Портфолио"
+          subtitle="Голос, приветствие, информация о мастере с адресом и мини-картой, правила переноса, kill-switch. Плюс портфолио по категориям с загрузкой работ.">
+          <DCArtboard id="st-proto" label="Прототип · кликабельный" width={940} height={780}>
+            <SettingsPrototype />
+          </DCArtboard>
+          <DCArtboard id="st-home" label="1 · Главный экран" width={320} height={660}>
+            <SettingsHome />
+          </DCArtboard>
+          <DCArtboard id="st-tone" label="2 · Голос бота" width={320} height={660}>
+            <ToneSetting />
+          </DCArtboard>
+          <DCArtboard id="st-info" label="3 · О мастере + адрес ★" width={320} height={660}>
+            <MasterInfo />
+          </DCArtboard>
+          <DCArtboard id="st-rules" label="4 · Перенос/отмена" width={320} height={660}>
+            <CancelRules />
+          </DCArtboard>
+          <DCArtboard id="st-greet" label="5 · Приветствие" width={320} height={660}>
+            <Greeting />
+          </DCArtboard>
+          <DCArtboard id="st-kill" label="6 · Выключить бота" width={320} height={660}>
+            <KillSwitch />
+          </DCArtboard>
+          <DCArtboard id="st-folio" label="7 · Портфолио ★" width={320} height={660}>
+            <Portfolio />
+          </DCArtboard>
+          <DCArtboard id="st-upload" label="8 · Загрузить работу" width={320} height={660}>
+            <PortfolioUpload />
+          </DCArtboard>
+        </DCSection>
+
+        {/* Onboarding (final, под систему D) */}
+        <DCSection
+          id="onboarding-final"
+          title="Онбординг · первый запуск ★"
+          subtitle="7 экранов: с момента установки до подключённого бота за 4 минуты. Дизайн D — финальный.">
+          <DCArtboard id="ob-proto" label="Прототип · кликабельный" width={920} height={780}>
+            <OnboardingFlow />
+          </DCArtboard>
+          <DCArtboard id="ob-1" label="1 · Welcome" width={320} height={660}>
+            <ObWelcome />
+          </DCArtboard>
+          <DCArtboard id="ob-2" label="2 · Ниша" width={320} height={660}>
+            <ObNiche />
+          </DCArtboard>
+          <DCArtboard id="ob-3" label="3 · Подключение Telegram ★" width={320} height={660}>
+            <ObConnect />
+          </DCArtboard>
+          <DCArtboard id="ob-4" label="4 · Готовые воронки" width={320} height={660}>
+            <ObFunnels />
+          </DCArtboard>
+          <DCArtboard id="ob-5" label="5 · Услуги из шаблона" width={320} height={660}>
+            <ObServices />
+          </DCArtboard>
+          <DCArtboard id="ob-6" label="6 · Расписание" width={320} height={660}>
+            <ObSchedule />
+          </DCArtboard>
+          <DCArtboard id="ob-7" label="7 · Готово ★" width={320} height={660}>
+            <ObDone />
+          </DCArtboard>
+        </DCSection>
+
+        {/* Dashboard — главный экран приложения */}
+        <DCSection
+          id="dashboard"
+          title="Главный экран приложения"
+          subtitle="То что мастер видит когда открывает Mini App. Два варианта: насыщенный (статистика + задачи) и минимальный (один ближайший визит на хиро).">
+          <DCArtboard id="dash-home" label="A · Насыщенный ★" width={320} height={660}>
+            <DashHome />
+          </DCArtboard>
+          <DCArtboard id="dash-min" label="B · Минимальный" width={320} height={660}>
+            <DashMinimal />
+          </DCArtboard>
+        </DCSection>
+
+        {/* Pricing & Monetization */}
+        <DCSection
+          id="pricing"
+          title="Тарифы и монетизация"
+          subtitle="SaaS-подписка: Trial 14 дней → Pro 900 ₽/мес → Pro+ 2400 ₽/мес для команд. Год со скидкой 20%. Тон — прозрачный, через ROI: «бот окупится за 2 записи».">
+          <DCArtboard id="pr-proto" label="Прототип · кликабельный" width={920} height={780}>
+            <PricingPrototype />
+          </DCArtboard>
+          <DCArtboard id="pr-show" label="1 · Витрина тарифов ★" width={320} height={660}>
+            <PricingShowcase />
+          </DCArtboard>
+          <DCArtboard id="pr-cur" label="2 · Текущий тариф / ROI ★" width={320} height={660}>
+            <CurrentSubscription />
+          </DCArtboard>
+          <DCArtboard id="pr-co" label="3 · Чекаут" width={320} height={660}>
+            <Checkout />
+          </DCArtboard>
+          <DCArtboard id="pr-pw" label="4 · Paywall (мягкий) ★" width={320} height={660}>
+            <Paywall />
+          </DCArtboard>
+          <DCArtboard id="pr-hist" label="5 · История платежей" width={320} height={660}>
+            <PaymentHistory />
+          </DCArtboard>
+          <DCArtboard id="pr-ref" label="6 · Рефералы" width={320} height={660}>
+            <Referral />
+          </DCArtboard>
+        </DCSection>
+
+        {/* Chat under Telegram Business */}
+        <DCSection
+          id="chat-biz"
+          title="Чат под Telegram Business"
+          subtitle="Бот и мастер пишут от одного имени в личном Telegram. Список чатов, режим «бот ведёт», перехват, шпаргалка, режимы автоматизации.">
+          <DCArtboard id="cb-proto" label="Прототип · кликабельный" width={920} height={780}>
+            <ChatBizPrototype />
+          </DCArtboard>
+          <DCArtboard id="cb-list" label="1 · Список чатов в Telegram" width={320} height={660}>
+            <MasterChatList />
+          </DCArtboard>
+          <DCArtboard id="cb-bot" label="2 · Бот ведёт ★" width={320} height={660}>
+            <ChatBotLeads />
+          </DCArtboard>
+          <DCArtboard id="cb-take" label="3 · Перехват ★" width={320} height={660}>
+            <ChatTakeover />
+          </DCArtboard>
+          <DCArtboard id="cb-crm" label="4 · Карточка в CRM" width={320} height={660}>
+            <CrmChatCard />
+          </DCArtboard>
+          <DCArtboard id="cb-sug" label="5 · Шпаргалка от бота ★" width={320} height={660}>
+            <BotSuggest />
+          </DCArtboard>
+          <DCArtboard id="cb-modes" label="6 · Режимы автоматизации" width={320} height={660}>
+            <AutoModes />
+          </DCArtboard>
+        </DCSection>
+
+        {/* Analytics */}
+        <DCSection
+          id="analytics"
+          title="Аналитика для мастера"
+          subtitle="Сводка, финансы, удержание, воронки, услуги, авто-инсайты от бота, сравнение периодов. 7 экранов.">
+          <DCArtboard id="an-proto" label="Прототип · кликабельный" width={920} height={780}>
+            <AnalyticsPrototype />
+          </DCArtboard>
+          <DCArtboard id="an-ov" label="1 · Сводка ★" width={320} height={660}>
+            <AnOverview />
+          </DCArtboard>
+          <DCArtboard id="an-fin" label="2 · Финансы" width={320} height={660}>
+            <AnFinance />
+          </DCArtboard>
+          <DCArtboard id="an-cli" label="3 · Удержание" width={320} height={660}>
+            <AnClients />
+          </DCArtboard>
+          <DCArtboard id="an-fnl" label="4 · Воронки" width={320} height={660}>
+            <AnFunnels />
+          </DCArtboard>
+          <DCArtboard id="an-srv" label="5 · Услуги" width={320} height={660}>
+            <AnServices />
+          </DCArtboard>
+          <DCArtboard id="an-ins" label="6 · Инсайты ★" width={320} height={660}>
+            <AnInsights />
+          </DCArtboard>
+          <DCArtboard id="an-cmp" label="7 · Сравнение периодов" width={320} height={660}>
+            <AnCompare />
+          </DCArtboard>
+        </DCSection>
+
+        {/* 4. Tone of voice */}
+        <DCSection
+          id="tone"
+          title="Tone of voice · принципы голоса"
+          subtitle="Как разговариваем с мастером в интерфейсе.">
+          <DCArtboard id="tone-card" label="Голос интерфейса" width={1200} height={780}>
+            <ToneOfVoice />
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
