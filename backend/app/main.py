@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.miniapp import router as miniapp_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -23,3 +24,6 @@ app.add_middleware(
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:
     return {"status": "ok", "env": settings.ENVIRONMENT}
+
+
+app.include_router(miniapp_router, prefix="/api")

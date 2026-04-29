@@ -15,8 +15,14 @@ RUN apt-get update \
 
 WORKDIR /app
 
+ARG INSTALL_DEV=true
+
 COPY pyproject.toml poetry.lock* ./
-RUN poetry install --no-root --without dev
+RUN if [ "$INSTALL_DEV" = "true" ]; then \
+      poetry install --no-root; \
+    else \
+      poetry install --no-root --without dev; \
+    fi
 
 COPY . .
 
