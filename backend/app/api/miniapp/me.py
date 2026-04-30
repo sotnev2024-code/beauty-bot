@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentMaster, SessionDep
-from app.models import BusinessConnection, Funnel, Schedule, Service
+from app.models import BotSettings, BusinessConnection, Schedule, Service
 from app.schemas import MasterRead, MasterUpdate
 from app.schemas.master import OnboardingStatus
 
@@ -44,12 +44,8 @@ async def onboarding_status(master: CurrentMaster, session: SessionDep) -> Onboa
     )
     services_done = bool(has_service or 0)
 
-    has_funnel = await session.scalar(
-        select(func.count())
-        .select_from(Funnel)
-        .where(Funnel.master_id == master.id, Funnel.is_active.is_(True))
-    )
-    funnel_done = bool(has_funnel or 0)
+    bs = await session.get(BotSettings, master.id)
+    voice_done = bs is not None and bs.configured_at is not None
 
     has_biz = await session.scalar(
         select(func.count())
@@ -61,13 +57,20 @@ async def onboarding_status(master: CurrentMaster, session: SessionDep) -> Onboa
     )
     business_connected = bool(has_biz or 0)
 
-    complete = profile_done and address_done and schedule_done and services_done and funnel_done
+    # `voice_done` is reported separately. We don't gate `complete` on it yet
+    # because the deployed frontend has no `/onboarding/voice` route to redirect
+    # to — that ships in Step 10.
+    complete = (
+        profile_done and address_done and schedule_done and services_done
+    )
     return OnboardingStatus(
         profile_done=profile_done,
         address_done=address_done,
         schedule_done=schedule_done,
         services_done=services_done,
-        funnel_done=funnel_done,
+        voice_done=voice_done,
+        # Always True: funnels are no longer required. Kept for legacy clients.
+        funnel_done=True,
         business_connected=business_connected,
         complete=complete,
     )

@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import CurrentMaster, SessionDep
 from app.core.config import settings
-from app.models import Service
+from app.models import Service, ServiceCategory
 from app.schemas import ServiceCreate, ServiceRead, ServiceUpdate
 
 router = APIRouter(prefix="/services", tags=["services"])
@@ -31,6 +31,8 @@ async def create_service(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"max {settings.MAX_SERVICES_PER_MASTER} services per master",
         )
+    if payload.category_id is not None:
+        await _verify_category(session, master.id, payload.category_id)
     svc = Service(master_id=master.id, **payload.model_dump())
     session.add(svc)
     await session.commit()
@@ -46,11 +48,22 @@ async def update_service(
     session: SessionDep,
 ) -> ServiceRead:
     svc = await _get_owned(session, master.id, service_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if "category_id" in data and data["category_id"] is not None:
+        await _verify_category(session, master.id, data["category_id"])
+    for field, value in data.items():
         setattr(svc, field, value)
     await session.commit()
     await session.refresh(svc)
     return ServiceRead.model_validate(svc)
+
+
+async def _verify_category(session, master_id: int, category_id: int) -> None:
+    cat = await session.get(ServiceCategory, category_id)
+    if cat is None or cat.master_id != master_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="invalid category_id"
+        )
 
 
 @router.delete(

@@ -9,6 +9,8 @@ class ServiceCreate(BaseModel):
     price: Decimal = Field(ge=0)
     description: str | None = None
     group: str | None = Field(default=None, max_length=64)
+    category_id: int | None = None
+    reminder_after_days: int | None = Field(default=None, ge=1, le=365)
     is_active: bool = True
 
 
@@ -18,6 +20,8 @@ class ServiceUpdate(BaseModel):
     price: Decimal | None = Field(default=None, ge=0)
     description: str | None = None
     group: str | None = Field(default=None, max_length=64)
+    category_id: int | None = None
+    reminder_after_days: int | None = Field(default=None, ge=1, le=365)
     is_active: bool | None = None
 
 
@@ -30,4 +34,6 @@ class ServiceRead(BaseModel):
     price: Decimal
     description: str | None
     group: str | None
+    category_id: int | None
+    reminder_after_days: int | None
     is_active: bool

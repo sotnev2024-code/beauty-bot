@@ -1,4 +1,5 @@
 from app.schemas.booking import BookingCreate, BookingDetail, BookingRead, BookingUpdate
+from app.schemas.bot_settings import BotSettingsRead, BotSettingsUpdate
 from app.schemas.funnel import (
     FunnelCreate,
     FunnelRead,
@@ -8,7 +9,10 @@ from app.schemas.funnel import (
     FunnelUpdate,
     SeedPresetRequest,
 )
+from app.schemas.knowledge_base import KnowledgeItemCreate, KnowledgeItemRead, KnowledgeItemUpdate
 from app.schemas.master import MasterRead, MasterUpdate
+from app.schemas.return_campaign import ReturnCampaignRead
+from app.schemas.return_settings import ReturnSettingsRead, ReturnSettingsUpdate
 from app.schemas.schedule import (
     ScheduleBreakEntry,
     ScheduleBreakRead,
@@ -19,6 +23,12 @@ from app.schemas.schedule import (
     TimeOffRead,
 )
 from app.schemas.service import ServiceCreate, ServiceRead, ServiceUpdate
+from app.schemas.service_category import (
+    CategoryReorderRequest,
+    ServiceCategoryCreate,
+    ServiceCategoryRead,
+    ServiceCategoryUpdate,
+)
 from app.schemas.slot import SlotLockRequest, SlotLockResponse, SlotRead, SlotsResponse
 
 __all__ = [
@@ -26,20 +36,32 @@ __all__ = [
     "BookingDetail",
     "BookingRead",
     "BookingUpdate",
+    "BotSettingsRead",
+    "BotSettingsUpdate",
+    "CategoryReorderRequest",
     "FunnelCreate",
     "FunnelRead",
     "FunnelStepCreate",
     "FunnelStepRead",
     "FunnelSummary",
     "FunnelUpdate",
+    "KnowledgeItemCreate",
+    "KnowledgeItemRead",
+    "KnowledgeItemUpdate",
     "MasterRead",
     "MasterUpdate",
+    "ReturnCampaignRead",
+    "ReturnSettingsRead",
+    "ReturnSettingsUpdate",
     "SeedPresetRequest",
     "ScheduleBreakEntry",
     "ScheduleBreakRead",
     "ScheduleBundle",
     "ScheduleEntry",
     "ScheduleEntryRead",
+    "ServiceCategoryCreate",
+    "ServiceCategoryRead",
+    "ServiceCategoryUpdate",
     "ServiceCreate",
     "ServiceRead",
     "ServiceUpdate",

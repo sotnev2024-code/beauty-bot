@@ -43,6 +43,10 @@ class OnboardingStatus(BaseModel):
     address_done: bool
     schedule_done: bool
     services_done: bool
+    voice_done: bool
+    # Legacy gate — always True post-Step 1 since we no longer gate on funnels.
+    # Kept in the schema so the deployed frontend's STEP_ROUTES still parses;
+    # removed in Step 10.
     funnel_done: bool
     business_connected: bool
     complete: bool
