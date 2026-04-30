@@ -12,6 +12,11 @@ from app.services.billing import expire_lapsed_subscriptions
 from app.services.insights import generate_for_master
 from app.services.reminders import deliver_due_reminders
 from app.services.segments import recompute_all as recompute_segments_all
+from app.workers.return_campaigns import (
+    expire_due_campaigns,
+    send_due_return_invitations,
+)
+from app.workers.service_reminders import send_due_service_reminders
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +70,42 @@ async def segments_tick() -> None:
             await session.rollback()
 
 
+async def return_invitations_tick() -> None:
+    async with session_factory() as session:
+        try:
+            n = await send_due_return_invitations(session, sender=_send_via_bot)
+            await session.commit()
+            if n:
+                log.info("return invitations dispatched: %s", n)
+        except Exception:
+            log.exception("return_invitations_tick failed")
+            await session.rollback()
+
+
+async def service_reminders_tick() -> None:
+    async with session_factory() as session:
+        try:
+            n = await send_due_service_reminders(session, sender=_send_via_bot)
+            await session.commit()
+            if n:
+                log.info("service reminders dispatched: %s", n)
+        except Exception:
+            log.exception("service_reminders_tick failed")
+            await session.rollback()
+
+
+async def expire_return_campaigns_tick() -> None:
+    async with session_factory() as session:
+        try:
+            n = await expire_due_campaigns(session)
+            await session.commit()
+            if n:
+                log.info("return campaigns expired: %s", n)
+        except Exception:
+            log.exception("expire_return_campaigns_tick failed")
+            await session.rollback()
+
+
 async def insights_tick() -> None:
     from app.llm.factory import _provider, get_llm
     from app.models import Master
@@ -115,6 +156,28 @@ def start_scheduler() -> AsyncIOScheduler:
         hour=4,
         minute=0,
         id="insights_tick",
+        max_instances=1,
+    )
+    # Hourly hour-aligned tick — each worker filters by master.timezone == 11:00.
+    sched.add_job(
+        return_invitations_tick,
+        "cron",
+        minute=0,
+        id="return_invitations_tick",
+        max_instances=1,
+    )
+    sched.add_job(
+        service_reminders_tick,
+        "cron",
+        minute=0,
+        id="service_reminders_tick",
+        max_instances=1,
+    )
+    sched.add_job(
+        expire_return_campaigns_tick,
+        "cron",
+        minute=15,
+        id="expire_return_campaigns_tick",
         max_instances=1,
     )
     sched.start()
