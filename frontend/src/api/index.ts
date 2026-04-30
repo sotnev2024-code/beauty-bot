@@ -150,3 +150,14 @@ export const Analytics = {
   overview: (params?: { from_date?: string; to_date?: string }) =>
     api.get<OverviewData>('/analytics/overview', { params }).then((r) => r.data),
 };
+
+export const Billing = {
+  plan: () => api.get<import('./types').PlanInfo>('/billing/plan').then((r) => r.data),
+  history: () =>
+    api.get<import('./types').PaymentRow[]>('/billing/history').then((r) => r.data),
+  roi: () => api.get<import('./types').RoiData>('/billing/roi').then((r) => r.data),
+  checkout: (plan: 'pro' | 'pro_plus', annual = false) =>
+    api
+      .post<import('./types').CheckoutResponse>('/billing/checkout', { plan, annual })
+      .then((r) => r.data),
+};

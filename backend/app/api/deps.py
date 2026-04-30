@@ -43,6 +43,10 @@ async def current_master(
             name=" ".join(p for p in (tg.first_name, tg.last_name) if p) or None,
             timezone=settings.DEFAULT_TIMEZONE,
         )
+        # Idempotently start a 14-day trial on first signup.
+        from app.services.billing import ensure_trial
+
+        ensure_trial(master)
         session.add(master)
         await session.commit()
         await session.refresh(master)

@@ -7,6 +7,8 @@ export { ClientsPage } from './ClientsPage';
 export { Dashboard } from './Dashboard';
 export { FunnelEditor } from './FunnelEditor';
 export { FunnelsPage } from './FunnelsPage';
+export { Paywall } from './Paywall';
+export { PricingPage } from './PricingPage';
 export { SchedulePage } from './SchedulePage';
 export { ServicesPage } from './ServicesPage';
 export { SettingsPage } from './SettingsPage';

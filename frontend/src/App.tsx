@@ -19,6 +19,8 @@ import {
   Dashboard,
   FunnelEditor,
   FunnelsPage,
+  Paywall,
+  PricingPage,
   SchedulePage,
   ServicesPage,
   SettingsPage,
@@ -73,6 +75,21 @@ function NeedsOnboarding() {
   return <Outlet />;
 }
 
+function DashboardOrPaywall() {
+  const { master } = useMaster();
+  if (!master) return null;
+  const now = new Date();
+  const trialActive =
+    master.trial_ends_at && new Date(master.trial_ends_at) > now;
+  const subActive =
+    master.subscription_active_until &&
+    new Date(master.subscription_active_until) > now;
+  if (!trialActive && !subActive) {
+    return <Paywall reason="Подписка истекла" />;
+  }
+  return <Dashboard />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -88,7 +105,7 @@ export default function App() {
 
             <Route element={<NeedsOnboarding />}>
               <Route element={<AppLayout />}>
-                <Route path="/app" element={<Dashboard />} />
+                <Route path="/app" element={<DashboardOrPaywall />} />
                 <Route path="/app/calendar" element={<Calendar />} />
                 <Route path="/app/funnels" element={<FunnelsPage />} />
                 <Route path="/app/funnels/:id" element={<FunnelEditor />} />
@@ -99,6 +116,7 @@ export default function App() {
                 <Route path="/app/services" element={<ServicesPage />} />
                 <Route path="/app/schedule" element={<SchedulePage />} />
                 <Route path="/app/analytics" element={<AnalyticsPage />} />
+                <Route path="/app/pricing" element={<PricingPage />} />
               </Route>
             </Route>
 

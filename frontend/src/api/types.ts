@@ -210,3 +210,37 @@ export interface SlotsResponse {
   slots: SlotItem[];
   next_available_day: string | null;
 }
+
+export interface PlanInfo {
+  plan: Plan;
+  trial_ends_at: string | null;
+  subscription_active_until: string | null;
+  is_active: boolean;
+  pro_price_monthly: number;
+  pro_plus_price_monthly: number;
+  annual_discount_percent: number;
+}
+
+export interface PaymentRow {
+  id: number;
+  amount: string;
+  currency: string;
+  status: string;
+  period_start: string | null;
+  period_end: string | null;
+  created_at: string;
+}
+
+export interface RoiData {
+  period_days: number;
+  revenue: string;
+  cost: string;
+  roi_x: string | null;
+}
+
+export interface CheckoutResponse {
+  payment_id: number;
+  yookassa_id: string;
+  confirmation_url: string | null;
+  amount: string;
+}
