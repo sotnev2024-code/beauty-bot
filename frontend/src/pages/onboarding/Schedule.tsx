@@ -32,7 +32,7 @@ export function Schedule() {
           is_working: working[i] ?? false,
         }))
       );
-      nav('/onboarding/connect');
+      nav('/onboarding/services');
     } finally {
       setBusy(false);
     }
@@ -40,8 +40,8 @@ export function Schedule() {
 
   return (
     <OnboardingShell
-      step={3}
-      total={5}
+      step={4}
+      total={8}
       title="График работы"
       subtitle="Можно подкрутить позже в настройках."
       footer={

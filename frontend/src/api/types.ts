@@ -20,6 +20,7 @@ export interface Master {
   voice: string | null;
   greeting: string | null;
   rules: string | null;
+  address: string | null;
   created_at: string;
 }
 
@@ -30,7 +31,18 @@ export interface MasterUpdate {
   voice?: string;
   greeting?: string;
   rules?: string;
+  address?: string;
   bot_enabled?: boolean;
+}
+
+export interface OnboardingStatus {
+  profile_done: boolean;
+  address_done: boolean;
+  schedule_done: boolean;
+  services_done: boolean;
+  funnel_done: boolean;
+  business_connected: boolean;
+  complete: boolean;
 }
 
 export interface Service {

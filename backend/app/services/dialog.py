@@ -55,6 +55,7 @@ async def process_client_message(
         master_name=master.name,
         niche=master.niche,
         timezone=master.timezone or "Europe/Moscow",
+        address=master.address,
         step_goal=step.goal if step else None,
         step_system_prompt=step.system_prompt if step else None,
         services_text=services_text,

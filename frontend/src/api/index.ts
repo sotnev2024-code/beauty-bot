@@ -44,6 +44,10 @@ export const Me = {
   get: () => api.get<Master>('/me').then((r) => r.data),
   update: (payload: MasterUpdate) =>
     api.patch<Master>('/me', payload).then((r) => r.data),
+  onboardingStatus: () =>
+    api
+      .get<import('./types').OnboardingStatus>('/me/onboarding-status')
+      .then((r) => r.data),
 };
 
 export const Services = {

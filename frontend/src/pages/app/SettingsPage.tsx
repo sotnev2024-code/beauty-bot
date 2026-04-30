@@ -13,6 +13,7 @@ const VOICES = [
 export function SettingsPage() {
   const { master, update } = useMaster();
   const [name, setName] = useState(master?.name ?? '');
+  const [address, setAddress] = useState(master?.address ?? '');
   const [greeting, setGreeting] = useState(master?.greeting ?? '');
   const [rules, setRules] = useState(master?.rules ?? '');
   const [voice, setVoice] = useState(master?.voice ?? 'warm');
@@ -23,7 +24,7 @@ export function SettingsPage() {
   const save = async () => {
     setBusy(true);
     try {
-      await update({ name, greeting, rules, voice });
+      await update({ name, address, greeting, rules, voice });
     } finally {
       setBusy(false);
     }
@@ -69,6 +70,13 @@ export function SettingsPage() {
       <Card>
         <div className="flex flex-col gap-3">
           <Input label="Имя" value={name} onChange={(e) => setName(e.target.value)} />
+
+          <Input
+            label="Адрес"
+            placeholder="г. Москва, ул. Тверская, 5"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+          />
 
           <div>
             <span className="text-sm text-ink-soft font-medium">Тон голоса</span>

@@ -53,12 +53,15 @@ def build_system_prompt(
     master_name: str | None,
     niche: str | None,
     timezone: str = "Europe/Moscow",
+    address: str | None = None,
 ) -> str:
     parts = [BASE_SYSTEM, _now_block(timezone)]
     if master_name:
         parts.append(f"\nМастер: {master_name}.")
     if niche:
         parts.append(f"Ниша: {niche}.")
+    if address:
+        parts.append(f"\nАдрес салона: {address}. Сообщай его клиенту после подтверждения записи.")
     return "".join(parts)
 
 
@@ -67,11 +70,19 @@ def build_step_prompt(
     master_name: str | None,
     niche: str | None,
     timezone: str = "Europe/Moscow",
+    address: str | None = None,
     step_goal: str | None,
     step_system_prompt: str | None,
     services_text: str | None,
 ) -> str:
-    blocks = [build_system_prompt(master_name=master_name, niche=niche, timezone=timezone)]
+    blocks = [
+        build_system_prompt(
+            master_name=master_name,
+            niche=niche,
+            timezone=timezone,
+            address=address,
+        )
+    ]
     if step_system_prompt:
         blocks.append("\n\nКонтекст текущего шага воронки:\n" + step_system_prompt.strip())
     if step_goal:

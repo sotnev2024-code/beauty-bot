@@ -12,3 +12,4 @@ export { PricingPage } from './PricingPage';
 export { SchedulePage } from './SchedulePage';
 export { ServicesPage } from './ServicesPage';
 export { SettingsPage } from './SettingsPage';
+export { TestChatPage } from './TestChatPage';

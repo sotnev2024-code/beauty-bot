@@ -26,7 +26,7 @@ export function Profile() {
     setBusy(true);
     try {
       await update({ name, niche });
-      nav('/onboarding/schedule');
+      nav('/onboarding/address');
     } finally {
       setBusy(false);
     }
@@ -35,7 +35,7 @@ export function Profile() {
   return (
     <OnboardingShell
       step={2}
-      total={5}
+      total={8}
       title="Расскажи о себе"
       subtitle="Это видно только тебе и помогает боту звучать в твоём ключе."
       footer={

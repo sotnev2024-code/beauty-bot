@@ -1,12 +1,8 @@
-import { useEffect } from 'react';
-import {
-  BrowserRouter,
-  Navigate,
-  Outlet,
-  Route,
-  Routes,
-} from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 
+import { Me } from '@/api';
+import type { OnboardingStatus } from '@/api/types';
 import { PhoneShell } from '@/components/PhoneShell';
 import { readyTelegram } from '@/lib/tg';
 import {
@@ -24,13 +20,17 @@ import {
   SchedulePage,
   ServicesPage,
   SettingsPage,
+  TestChatPage,
 } from '@/pages/app';
 import {
+  Address,
   Connect,
   Done,
+  FunnelStep,
   Premium,
   Profile,
   Schedule,
+  Services,
   Welcome,
 } from '@/pages/onboarding';
 import { useMaster } from '@/store/master';
@@ -65,12 +65,32 @@ function Bootstrap() {
   return <Outlet />;
 }
 
+/** Steps in the order the user should complete them. */
+const STEP_ROUTES: { key: keyof OnboardingStatus; route: string }[] = [
+  { key: 'profile_done', route: '/onboarding/profile' },
+  { key: 'address_done', route: '/onboarding/address' },
+  { key: 'schedule_done', route: '/onboarding/schedule' },
+  { key: 'services_done', route: '/onboarding/services' },
+  { key: 'funnel_done', route: '/onboarding/funnel' },
+];
+
 function NeedsOnboarding() {
-  const { master } = useMaster();
-  if (!master) return null;
-  // Treat "no name + no niche" as not-yet-onboarded.
-  if (!master.name || !master.niche) {
-    return <Navigate to="/onboarding" replace />;
+  const [status, setStatus] = useState<OnboardingStatus | null>(null);
+
+  useEffect(() => {
+    Me.onboardingStatus().then(setStatus).catch(() => undefined);
+  }, []);
+
+  if (!status) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <span className="text-sm text-mute animate-pulse">Проверяем настройки…</span>
+      </div>
+    );
+  }
+  if (!status.complete) {
+    const next = STEP_ROUTES.find((s) => !status[s.key]);
+    return <Navigate to={next?.route ?? '/onboarding'} replace />;
   }
   return <Outlet />;
 }
@@ -99,7 +119,10 @@ export default function App() {
             <Route path="/onboarding" element={<Welcome />} />
             <Route path="/onboarding/premium" element={<Premium />} />
             <Route path="/onboarding/profile" element={<Profile />} />
+            <Route path="/onboarding/address" element={<Address />} />
             <Route path="/onboarding/schedule" element={<Schedule />} />
+            <Route path="/onboarding/services" element={<Services />} />
+            <Route path="/onboarding/funnel" element={<FunnelStep />} />
             <Route path="/onboarding/connect" element={<Connect />} />
             <Route path="/onboarding/done" element={<Done />} />
 
@@ -117,6 +140,7 @@ export default function App() {
                 <Route path="/app/schedule" element={<SchedulePage />} />
                 <Route path="/app/analytics" element={<AnalyticsPage />} />
                 <Route path="/app/pricing" element={<PricingPage />} />
+                <Route path="/app/test-chat" element={<TestChatPage />} />
               </Route>
             </Route>
 

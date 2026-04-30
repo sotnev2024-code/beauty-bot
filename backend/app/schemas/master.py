@@ -21,6 +21,7 @@ class MasterRead(BaseModel):
     voice: str | None
     greeting: str | None
     rules: str | None
+    address: str | None
     created_at: datetime
 
 
@@ -31,4 +32,17 @@ class MasterUpdate(BaseModel):
     voice: str | None = Field(default=None, max_length=32)
     greeting: str | None = None
     rules: str | None = None
+    address: str | None = Field(default=None, max_length=255)
     bot_enabled: bool | None = None
+
+
+class OnboardingStatus(BaseModel):
+    """What's required before the master can land on /app."""
+
+    profile_done: bool
+    address_done: bool
+    schedule_done: bool
+    services_done: bool
+    funnel_done: bool
+    business_connected: bool
+    complete: bool

@@ -35,6 +35,7 @@ class Master(IdMixin, TimestampMixin, Base):
     voice: Mapped[str | None] = mapped_column(String(32), nullable=True)
     greeting: Mapped[str | None] = mapped_column(Text, nullable=True)
     rules: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     business_connections: Mapped[list["BusinessConnection"]] = relationship(
         back_populates="master", cascade="all, delete-orphan"
