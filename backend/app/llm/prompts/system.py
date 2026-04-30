@@ -65,28 +65,3 @@ def build_system_prompt(
     return "".join(parts)
 
 
-def build_step_prompt(
-    *,
-    master_name: str | None,
-    niche: str | None,
-    timezone: str = "Europe/Moscow",
-    address: str | None = None,
-    step_goal: str | None,
-    step_system_prompt: str | None,
-    services_text: str | None,
-) -> str:
-    blocks = [
-        build_system_prompt(
-            master_name=master_name,
-            niche=niche,
-            timezone=timezone,
-            address=address,
-        )
-    ]
-    if step_system_prompt:
-        blocks.append("\n\nКонтекст текущего шага воронки:\n" + step_system_prompt.strip())
-    if step_goal:
-        blocks.append("\n\nЦель шага: " + step_goal.strip())
-    if services_text:
-        blocks.append("\n\nДоступные услуги:\n" + services_text.strip())
-    return "".join(blocks)

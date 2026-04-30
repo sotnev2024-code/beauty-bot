@@ -283,6 +283,9 @@ class _SequenceLLM:
         return self.results.pop(0)
 
 
+@pytest.mark.skip(
+    reason="Funnel-step advancement removed in Step 2 (bot hub refactor); deleted in Step 9"
+)
 async def test_dialog_advances_step_when_llm_hints_next_step(
     test_session: AsyncSession,
 ) -> None:

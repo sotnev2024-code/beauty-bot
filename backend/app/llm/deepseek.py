@@ -5,6 +5,10 @@ We ask the model to return a JSON object with a fixed schema via
 This works on every DeepSeek model (including reasoner, which doesn't
 support forced function-calling). Bad JSON triggers one corrective retry;
 HTTP errors back off and retry up to max_http_retries.
+
+The schema (reply, actions[], escalate, collected) is described inline
+inside `build_bot_prompt`; this provider only emits a final correction
+nudge if JSON parse fails.
 """
 
 from __future__ import annotations
@@ -22,24 +26,17 @@ from app.llm.base import LLMMessage, LLMProvider, LLMResult, LLMServiceError
 log = logging.getLogger(__name__)
 
 
-SCHEMA_INSTRUCTION = """Ты ВСЕГДА отвечаешь ОДНИМ JSON-объектом, без markdown
-и без пояснений. Структура:
-{
-  "reply": "<строка — твой ответ клиенту>",
-  "next_step_id": <integer | null — id следующего шага воронки или null>,
-  "escalate": <boolean — нужна ли ручная помощь мастера>,
-  "collected_data": {<object — поля, собранные на этом шаге>},
-  "slot_intent": <object | null — {starts_at: ISO-8601, service_id?: int} или null>,
-  "portfolio_request": <boolean — попросил ли клиент примеры работ>
-}
-Поля reply, escalate, portfolio_request обязательны."""
+CORRECTION_HINT = (
+    "Предыдущий ответ был некорректным. Верни ТОЛЬКО JSON-объект со схемой "
+    "{reply, actions, escalate, collected}. Без markdown, без обёртки."
+)
 
 
 @dataclass(slots=True)
 class DeepSeekConfig:
     api_key: str
     api_base: str = "https://api.deepseek.com"
-    model: str = "deepseek-v4-flash"
+    model: str = "deepseek-chat"
     request_timeout: float = 30.0
     max_http_retries: int = 3
     json_retry_attempts: int = 1
@@ -84,17 +81,7 @@ class DeepSeekProvider(LLMProvider):
             except LLMServiceError as e:
                 last_err = e
                 log.warning("LLM JSON parse failure (attempt %s): %s", attempt + 1, e)
-                messages = [
-                    *messages,
-                    {
-                        "role": "system",
-                        "content": (
-                            "Предыдущий ответ был некорректным. Верни ТОЛЬКО JSON-объект "
-                            "со схемой {reply, next_step_id, escalate, collected_data, "
-                            "slot_intent, portfolio_request}. Без markdown, без обёртки."
-                        ),
-                    },
-                ]
+                messages = [*messages, {"role": "system", "content": CORRECTION_HINT}]
 
         raise LLMServiceError(f"LLM returned unparseable JSON after retries: {last_err}")
 
@@ -106,9 +93,7 @@ class DeepSeekProvider(LLMProvider):
         history: list[LLMMessage],
         user_message: str,
     ) -> list[dict[str, Any]]:
-        # Prepend the schema instruction to whatever the funnel system_prompt is.
-        full_system = system_prompt.rstrip() + "\n\n" + SCHEMA_INSTRUCTION
-        msgs: list[dict[str, Any]] = [{"role": "system", "content": full_system}]
+        msgs: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
         for m in history:
             msgs.append({"role": m.role, "content": m.content})
         msgs.append({"role": "user", "content": user_message})
@@ -179,12 +164,38 @@ class DeepSeekProvider(LLMProvider):
         if not isinstance(reply, str) or not reply.strip():
             raise LLMServiceError("missing 'reply' in JSON")
 
+        actions_raw = args.get("actions") or []
+        if not isinstance(actions_raw, list):
+            actions_raw = []
+        actions: list[dict[str, Any]] = [a for a in actions_raw if isinstance(a, dict) and a.get("type")]
+
+        # Back-compat: synthesize actions from the legacy slot_intent /
+        # portfolio_request fields (older models / tests that haven't been
+        # migrated yet emit those instead of `actions`).
+        legacy_slot_intent = args.get("slot_intent") if isinstance(args.get("slot_intent"), dict) else None
+        legacy_portfolio = bool(args.get("portfolio_request", False))
+        if not actions:
+            if legacy_slot_intent:
+                actions.append({"type": "create_booking", **legacy_slot_intent})
+            if legacy_portfolio:
+                actions.append({"type": "send_portfolio"})
+
+        # Mirror back to legacy fields for any code path still reading them.
+        slot_intent: dict[str, Any] | None = legacy_slot_intent
+        portfolio_request = legacy_portfolio
+        for a in actions:
+            if not slot_intent and a.get("type") == "create_booking":
+                slot_intent = {k: v for k, v in a.items() if k != "type"}
+            if a.get("type") == "send_portfolio":
+                portfolio_request = True
+
         return LLMResult(
             reply=reply.strip(),
-            next_step_id=args.get("next_step_id"),
+            actions=actions,
             escalate=bool(args.get("escalate", False)),
-            collected_data=dict(args.get("collected_data") or {}),
-            slot_intent=args.get("slot_intent"),
-            portfolio_request=bool(args.get("portfolio_request", False)),
+            collected_data=dict(args.get("collected") or args.get("collected_data") or {}),
             raw=response,
+            next_step_id=args.get("next_step_id"),
+            slot_intent=slot_intent,
+            portfolio_request=portfolio_request,
         )

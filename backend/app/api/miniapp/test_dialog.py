@@ -1,10 +1,13 @@
-"""Virtual test chat — runs the funnel + LLM without writing to the DB.
+"""Virtual test chat — runs the bot prompt + LLM without writing to the DB.
 
-The Mini App posts the running message history + the new user line; we call
-the same LLM provider with the same step prompt (active funnel's first step
-or a follow-up step the master picked) and return the structured reply.
-Nothing is persisted — Conversation, Message, Booking, Reminder all stay
-untouched.
+Mini App posts message history + the new user line; we call the same LLM
+provider with the master's bot_settings and current KB/services, and return
+the structured reply. Nothing is persisted (no Conversation, Message, or
+Booking writes).
+
+This endpoint will be replaced by `/api/bot/test/*` (with Redis session and
+fake-booking carding) in Step 8. For now it stays alive so the existing
+TestChatPage in production keeps working during the rollout.
 """
 
 from __future__ import annotations
@@ -14,13 +17,17 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentMaster, SessionDep
 from app.llm import get_llm
 from app.llm.base import LLMMessage, LLMServiceError
-from app.llm.prompts import build_step_prompt
-from app.models import Funnel, Service
+from app.llm.prompts import build_bot_prompt
+from app.models import (
+    BotSettings,
+    KnowledgeBaseItem,
+    Service,
+    ServiceCategory,
+)
 
 router = APIRouter(prefix="/test", tags=["test"])
 
@@ -33,16 +40,14 @@ class TestMessage(BaseModel):
 class TestDialogRequest(BaseModel):
     history: list[TestMessage] = Field(default_factory=list)
     user_message: str = Field(min_length=1, max_length=2000)
-    funnel_id: int | None = None
-    step_position: int | None = Field(default=None, ge=0)
+    funnel_id: int | None = None  # ignored, kept for backward compat
+    step_position: int | None = Field(default=None, ge=0)  # ignored
 
 
 class TestDialogResponse(BaseModel):
     reply: str
-    next_step_id: int | None
+    actions: list[dict[str, Any]]
     escalate: bool
-    portfolio_request: bool
-    slot_intent: dict[str, Any] | None
     collected_data: dict[str, Any]
 
 
@@ -52,47 +57,22 @@ async def test_dialog(
     master: CurrentMaster,
     session: SessionDep,
 ) -> TestDialogResponse:
-    # Pick a funnel — explicit id, otherwise the active main one.
-    funnel: Funnel | None = None
-    if payload.funnel_id is not None:
-        funnel = (
-            await session.execute(
-                select(Funnel)
-                .where(Funnel.id == payload.funnel_id, Funnel.master_id == master.id)
-                .options(selectinload(Funnel.steps))
-            )
-        ).scalar_one_or_none()
-    else:
-        funnel = (
-            await session.execute(
-                select(Funnel)
-                .where(Funnel.master_id == master.id, Funnel.is_active.is_(True))
-                .options(selectinload(Funnel.steps))
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-    if funnel is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="no active funnel — pick one in Bot tab first",
-        )
-
-    sorted_steps = sorted(funnel.steps, key=lambda s: s.position)
-    step = None
-    if payload.step_position is not None:
-        step = next((s for s in sorted_steps if s.position == payload.step_position), None)
-    if step is None and sorted_steps:
-        step = sorted_steps[0]
+    bs = await session.get(BotSettings, master.id)
+    voice_tone = bs.voice_tone if bs else "warm"
+    message_format = bs.message_format if bs else "hybrid"
 
     services_text = await _services_block(session, master.id)
-    system_prompt = build_step_prompt(
+    kb_short_lines = await _kb_short_lines(session, master.id)
+
+    system_prompt = build_bot_prompt(
         master_name=master.name,
         niche=master.niche,
         timezone=master.timezone or "Europe/Moscow",
-        address=master.address,
-        step_goal=step.goal if step else None,
-        step_system_prompt=step.system_prompt if step else None,
+        voice_tone=voice_tone,
+        message_format=message_format,
         services_text=services_text,
+        kb_short_lines=kb_short_lines,
+        return_context=None,
     )
 
     history = [
@@ -108,14 +88,14 @@ async def test_dialog(
             user_message=payload.user_message,
         )
     except LLMServiceError as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)
+        ) from e
 
     return TestDialogResponse(
         reply=result.reply,
-        next_step_id=result.next_step_id,
+        actions=result.actions,
         escalate=result.escalate,
-        portfolio_request=result.portfolio_request,
-        slot_intent=result.slot_intent,
         collected_data=result.collected_data,
     )
 
@@ -134,9 +114,55 @@ async def _services_block(session: SessionDep, master_id: int) -> str | None:
     )
     if not rows:
         return None
-    lines = [
-        f"- id={s.id}: {s.name}, {s.duration_minutes} мин, {s.price} ₽"
-        + (f" — {s.description}" if s.description else "")
-        for s in rows
-    ]
+    cats = {
+        c.id: c
+        for c in (
+            (
+                await session.execute(
+                    select(ServiceCategory).where(ServiceCategory.master_id == master_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    }
+    lines = []
+    for s in rows:
+        cat_name = cats[s.category_id].name if (s.category_id and s.category_id in cats) else (
+            s.group or None
+        )
+        cat_part = f" [{cat_name}]" if cat_name else ""
+        desc_part = f" — {s.description}" if s.description else ""
+        lines.append(
+            f"- id={s.id}: {s.name}{cat_part}, {s.duration_minutes} мин, {s.price} ₽{desc_part}"
+        )
     return "\n".join(lines)
+
+
+async def _kb_short_lines(session: SessionDep, master_id: int) -> list[str]:
+    rows = (
+        (
+            await session.execute(
+                select(KnowledgeBaseItem)
+                .where(
+                    KnowledgeBaseItem.master_id == master_id,
+                    KnowledgeBaseItem.is_short.is_(True),
+                )
+                .order_by(KnowledgeBaseItem.position, KnowledgeBaseItem.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    out: list[str] = []
+    for r in rows:
+        body = r.content.strip().replace("\n", " ")
+        out.append(f"{r.title}: {body}")
+        if r.geolocation_lat is not None and r.geolocation_lng is not None:
+            out.append(
+                f"Координаты {r.title.lower()}: "
+                f"{r.geolocation_lat:.6f}, {r.geolocation_lng:.6f}"
+            )
+        if r.yandex_maps_url:
+            out.append(f"Яндекс.Карты: {r.yandex_maps_url}")
+    return out

@@ -1,8 +1,14 @@
 """LLM provider abstraction.
 
-The bot funnel engine talks to this Protocol; in v1 it's backed by DeepSeek
-(see deepseek.py). Other providers (OpenAI, local) just need to implement
-the same generate() signature.
+The bot dialog engine talks to this Protocol; v1 backend is DeepSeek
+(see deepseek.py). The provider returns an `LLMResult` containing the
+client-facing reply plus a list of `actions` the server should dispatch
+(create_booking, find_slots, lookup_kb, send_portfolio, send_location).
+
+Legacy fields (`slot_intent`, `portfolio_request`, `next_step_id`) are
+kept as a back-compat shim for older tests and any pre-refactor stubs.
+The DeepSeekProvider keeps them populated from `actions` for symmetry.
+They will be removed in Step 9 when funnel code is deleted.
 """
 
 from __future__ import annotations
@@ -26,15 +32,17 @@ class LLMMessage:
 
 @dataclass(slots=True)
 class LLMResult:
-    """Structured reply the funnel engine relies on."""
+    """Structured reply the dialog engine relies on."""
 
     reply: str
-    next_step_id: int | None = None
+    actions: list[dict[str, Any]] = field(default_factory=list)
     escalate: bool = False
     collected_data: dict[str, Any] = field(default_factory=dict)
+    raw: dict[str, Any] = field(default_factory=dict)
+    # Legacy fields — back-compat shim. Removed in Step 9.
+    next_step_id: int | None = None
     slot_intent: dict[str, Any] | None = None
     portfolio_request: bool = False
-    raw: dict[str, Any] = field(default_factory=dict)
 
 
 class LLMProvider(Protocol):

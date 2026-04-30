@@ -1,4 +1,9 @@
-"""Lazy LLM provider singleton."""
+"""Lazy LLM provider singleton.
+
+DeepSeek is reachable directly from Russia, so by default we don't route the
+LLM client through `HTTP_PROXY_URL` (which is meant for Telegram/YooKassa).
+Set `DEEPSEEK_PROXY_URL` explicitly if you need to override.
+"""
 
 from __future__ import annotations
 
@@ -20,7 +25,7 @@ def get_llm() -> LLMProvider:
                 api_base=settings.DEEPSEEK_API_BASE,
                 model=settings.DEEPSEEK_MODEL,
             ),
-            proxy=settings.HTTP_PROXY_URL or None,
+            proxy=settings.DEEPSEEK_PROXY_URL or None,
         )
     return _provider
 

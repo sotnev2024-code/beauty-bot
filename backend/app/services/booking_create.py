@@ -1,9 +1,14 @@
-"""create_booking: validate slot, create row, release lock, schedule reminders."""
+"""create_booking: validate slot, create row, release lock, schedule reminders.
+
+If the client has an active ReturnCampaign (status='sent', valid_until > now),
+the discount is applied automatically and the campaign is marked as booked.
+"""
 
 from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from redis.asyncio import Redis
 from sqlalchemy import and_, or_, select
@@ -14,6 +19,7 @@ from app.models import (
     BookingStatus,
     Client,
     Master,
+    ReturnCampaign,
     Service,
 )
 from app.services.booking import release_slot_lock
@@ -64,6 +70,37 @@ async def create_booking(
     if existing is not None:
         raise BookingError("slot collides with existing booking")
 
+    # Look up an active return campaign for this client; apply its discount.
+    now = datetime.now(UTC)
+    campaign: ReturnCampaign | None = (
+        await session.execute(
+            select(ReturnCampaign)
+            .where(
+                ReturnCampaign.master_id == master.id,
+                ReturnCampaign.client_id == client.id,
+                ReturnCampaign.status == "sent",
+                ReturnCampaign.discount_valid_until > now,
+            )
+            .order_by(ReturnCampaign.sent_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    base_price = service.price
+    discount_applied = False
+    discount_percent: int | None = None
+    final_price = base_price
+
+    if campaign is not None:
+        discount_applied = True
+        discount_percent = int(campaign.discount_percent)
+        if base_price is not None:
+            final_price = (
+                Decimal(base_price)
+                * (Decimal(100) - Decimal(discount_percent))
+                / Decimal(100)
+            ).quantize(Decimal("0.01"))
+
     booking = Booking(
         master_id=master.id,
         client_id=client.id,
@@ -71,11 +108,19 @@ async def create_booking(
         starts_at=starts_at,
         ends_at=ends_at,
         status=BookingStatus.SCHEDULED,
-        price=service.price,
+        price=final_price,
         source=source,
+        discount_applied=discount_applied,
+        discount_percent=discount_percent,
+        return_campaign_id=campaign.id if campaign else None,
     )
     session.add(booking)
     await session.flush()
+
+    if campaign is not None:
+        campaign.status = "booked"
+        campaign.responded_at = now
+        campaign.booking_id = booking.id
 
     await schedule_booking_reminders(session, booking=booking)
 

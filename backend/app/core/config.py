@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # DeepSeek
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_API_BASE: str = "https://api.deepseek.com"
-    DEEPSEEK_MODEL: str = "deepseek-v4-flash"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
 
     # YooKassa
     YOOKASSA_SHOP_ID: str = ""
@@ -68,11 +68,16 @@ class Settings(BaseSettings):
     MAX_SERVICES_PER_MASTER: int = 20
     LLM_HISTORY_MESSAGES: int = 20
 
-    # Outbound HTTP proxy for Telegram Bot API / DeepSeek / YooKassa.
+    # Outbound HTTP proxy for Telegram Bot API / YooKassa.
     # Use when the host is in a region with restricted outbound access.
     # Format: http://user:pass@host:port (or http://host:port for unauthenticated).
     # Empty string disables proxying.
     HTTP_PROXY_URL: str = ""
+
+    # DeepSeek-specific proxy override. Direct routing from Russia works for
+    # api.deepseek.com, so this defaults to empty (no proxy). Set explicitly
+    # if you need a separate path for the LLM client.
+    DEEPSEEK_PROXY_URL: str = ""
 
     @property
     def allowed_origins_list(self) -> list[str]:
