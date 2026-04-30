@@ -1,4 +1,4 @@
-from app.schemas.booking import BookingCreate, BookingRead
+from app.schemas.booking import BookingCreate, BookingDetail, BookingRead, BookingUpdate
 from app.schemas.funnel import (
     FunnelCreate,
     FunnelRead,
@@ -8,7 +8,7 @@ from app.schemas.funnel import (
     FunnelUpdate,
     SeedPresetRequest,
 )
-from app.schemas.master import MasterRead
+from app.schemas.master import MasterRead, MasterUpdate
 from app.schemas.schedule import (
     ScheduleBreakEntry,
     ScheduleBreakRead,
@@ -23,7 +23,9 @@ from app.schemas.slot import SlotLockRequest, SlotLockResponse, SlotRead, SlotsR
 
 __all__ = [
     "BookingCreate",
+    "BookingDetail",
     "BookingRead",
+    "BookingUpdate",
     "FunnelCreate",
     "FunnelRead",
     "FunnelStepCreate",
@@ -31,6 +33,7 @@ __all__ = [
     "FunnelSummary",
     "FunnelUpdate",
     "MasterRead",
+    "MasterUpdate",
     "SeedPresetRequest",
     "ScheduleBreakEntry",
     "ScheduleBreakRead",

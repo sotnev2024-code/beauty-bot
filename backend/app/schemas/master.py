@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import Plan
 
@@ -17,4 +17,18 @@ class MasterRead(BaseModel):
     plan: Plan
     trial_ends_at: datetime | None
     subscription_active_until: datetime | None
+    bot_enabled: bool
+    voice: str | None
+    greeting: str | None
+    rules: str | None
     created_at: datetime
+
+
+class MasterUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    niche: str | None = Field(default=None, max_length=64)
+    timezone: str | None = Field(default=None, max_length=64)
+    voice: str | None = Field(default=None, max_length=32)
+    greeting: str | None = None
+    rules: str | None = None
+    bot_enabled: bool | None = None

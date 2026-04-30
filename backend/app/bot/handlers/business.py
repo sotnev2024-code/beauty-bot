@@ -138,10 +138,16 @@ async def on_business_message(message: Message) -> None:
         )
         await session.flush()
 
-        # Bot replies only to the client and only when not in human-takeover.
-        should_reply = not is_master_outgoing and text and _bot_active(conversation, now)
+        # Bot replies only to the client when not in human-takeover AND
+        # the master hasn't flipped the global kill switch.
+        master = await _load_master(session, master_id)
+        should_reply = (
+            not is_master_outgoing
+            and text
+            and master.bot_enabled
+            and _bot_active(conversation, now)
+        )
         if should_reply:
-            master = await _load_master(session, master_id)
             out_msg = await process_client_message(
                 session,
                 master=master,

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, String
+from sqlalchemy import BigInteger, Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, IdMixin, TimestampMixin
@@ -29,6 +29,12 @@ class Master(IdMixin, TimestampMixin, Base):
     subscription_active_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    # Profile / settings
+    bot_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    voice: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    greeting: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rules: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     business_connections: Mapped[list["BusinessConnection"]] = relationship(
         back_populates="master", cascade="all, delete-orphan"

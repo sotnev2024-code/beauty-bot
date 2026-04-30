@@ -26,3 +26,15 @@ class BookingRead(BaseModel):
     price: Decimal | None
     source: str | None
     notes: str | None
+
+
+class BookingDetail(BookingRead):
+    client_name: str | None = None
+    client_phone: str | None = None
+    service_name: str | None = None
+
+
+class BookingUpdate(BaseModel):
+    starts_at: datetime | None = None
+    status: BookingStatus | None = None
+    notes: str | None = None
