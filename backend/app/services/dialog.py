@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,6 +54,7 @@ async def process_client_message(
     system_prompt = build_step_prompt(
         master_name=master.name,
         niche=master.niche,
+        timezone=master.timezone or "Europe/Moscow",
         step_goal=step.goal if step else None,
         step_system_prompt=step.system_prompt if step else None,
         services_text=services_text,
@@ -187,6 +188,15 @@ async def _try_create_from_slot_intent(
         starts_at = datetime.fromisoformat(str(starts_at_raw))
     except ValueError:
         log.warning("slot_intent: invalid starts_at=%r", starts_at_raw)
+        return None
+
+    # Reject naive timestamps and anything in the past — protects against the
+    # LLM hallucinating last-year dates when it doesn't know "today".
+    if starts_at.tzinfo is None:
+        log.warning("slot_intent: missing tz on starts_at=%r", starts_at_raw)
+        return None
+    if starts_at <= datetime.now(UTC):
+        log.warning("slot_intent: starts_at in the past (%s)", starts_at.isoformat())
         return None
 
     svc: Service | None = None
