@@ -1,59 +1,99 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import {
+  BrowserRouter,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+} from 'react-router-dom';
 
-type Health = { status: string; env: string };
+import { PhoneShell } from '@/components/PhoneShell';
+import { readyTelegram } from '@/lib/tg';
+import {
+  AppLayout,
+  Calendar,
+  ClientsPage,
+  Dashboard,
+  FunnelsPage,
+  SettingsPage,
+} from '@/pages/app';
+import {
+  Connect,
+  Done,
+  Premium,
+  Profile,
+  Schedule,
+  Welcome,
+} from '@/pages/onboarding';
+import { useMaster } from '@/store/master';
 
-export default function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState<string | null>(null);
+function Bootstrap() {
+  const { master, loading, error, fetch } = useMaster();
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((r) => (r.ok ? (r.json() as Promise<Health>) : Promise.reject(r.statusText)))
-      .then(setHealth)
-      .catch((e) => setError(String(e)));
-  }, []);
+    readyTelegram();
+    if (!master && !loading && !error) {
+      fetch();
+    }
+  }, [master, loading, error, fetch]);
 
-  return (
-    <div className="min-h-full flex items-center justify-center px-6">
-      <div className="w-full max-w-[360px] bg-card rounded-3xl shadow-md p-8 flex flex-col gap-6 border border-divider">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium uppercase tracking-wider text-mute">
-            Beauty.dev
-          </span>
-          <h1 className="font-display text-3xl text-ink">AI-ассистент для бьюти-мастеров</h1>
-          <p className="text-base text-ink-soft">
-            Скелет проекта поднят. Дальше — модели БД, бот и Mini App.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          className="w-full bg-coral-grad text-white text-base font-semibold py-3 rounded-xl shadow-coral transition active:scale-[0.98]"
-        >
-          Начать
-        </button>
-
-        <div className="text-sm">
-          {health && (
-            <div className="flex items-center gap-2 text-success">
-              <span className="w-2 h-2 rounded-full bg-success" />
-              backend OK · env: <span className="font-mono">{health.env}</span>
-            </div>
-          )}
-          {error && (
-            <div className="flex items-center gap-2 text-danger">
-              <span className="w-2 h-2 rounded-full bg-danger" />
-              backend недоступен: <span className="font-mono">{error}</span>
-            </div>
-          )}
-          {!health && !error && (
-            <div className="flex items-center gap-2 text-mute">
-              <span className="w-2 h-2 rounded-full bg-mute animate-pulse" />
-              проверяем backend…
-            </div>
-          )}
-        </div>
+  if (loading || (!master && !error)) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <span className="text-sm text-mute animate-pulse">Загружаем профиль…</span>
       </div>
-    </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-2 px-6 text-center">
+        <span className="text-sm text-danger">Не получилось загрузить профиль</span>
+        <span className="text-xs text-mute">
+          Открой Mini App из Telegram, чтобы initData передался серверу.
+        </span>
+      </div>
+    );
+  }
+  return <Outlet />;
+}
+
+function NeedsOnboarding() {
+  const { master } = useMaster();
+  if (!master) return null;
+  // Treat "no name + no niche" as not-yet-onboarded.
+  if (!master.name || !master.niche) {
+    return <Navigate to="/onboarding" replace />;
+  }
+  return <Outlet />;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <PhoneShell>
+        <Routes>
+          <Route element={<Bootstrap />}>
+            <Route path="/onboarding" element={<Welcome />} />
+            <Route path="/onboarding/premium" element={<Premium />} />
+            <Route path="/onboarding/profile" element={<Profile />} />
+            <Route path="/onboarding/schedule" element={<Schedule />} />
+            <Route path="/onboarding/connect" element={<Connect />} />
+            <Route path="/onboarding/done" element={<Done />} />
+
+            <Route element={<NeedsOnboarding />}>
+              <Route element={<AppLayout />}>
+                <Route path="/app" element={<Dashboard />} />
+                <Route path="/app/calendar" element={<Calendar />} />
+                <Route path="/app/funnels" element={<FunnelsPage />} />
+                <Route path="/app/clients" element={<ClientsPage />} />
+                <Route path="/app/settings" element={<SettingsPage />} />
+              </Route>
+            </Route>
+
+            <Route path="*" element={<Navigate to="/app" replace />} />
+          </Route>
+        </Routes>
+      </PhoneShell>
+    </BrowserRouter>
   );
 }
