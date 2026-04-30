@@ -8,12 +8,13 @@ import httpx
 import pytest
 
 from app.llm.base import LLMServiceError
-from app.llm.deepseek import REPLY_TOOL_NAME, DeepSeekConfig, DeepSeekProvider
+from app.llm.deepseek import DeepSeekConfig, DeepSeekProvider
 
 pytestmark = pytest.mark.asyncio
 
 
-def _tool_response(args: dict[str, object]) -> dict[str, object]:
+def _json_response(args: dict[str, object]) -> dict[str, object]:
+    """Wrap structured args as the assistant's JSON content."""
     return {
         "id": "chatcmpl-1",
         "model": "deepseek-v4-flash",
@@ -22,19 +23,9 @@ def _tool_response(args: dict[str, object]) -> dict[str, object]:
                 "index": 0,
                 "message": {
                     "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": "call_1",
-                            "type": "function",
-                            "function": {
-                                "name": REPLY_TOOL_NAME,
-                                "arguments": json.dumps(args, ensure_ascii=False),
-                            },
-                        }
-                    ],
+                    "content": json.dumps(args, ensure_ascii=False),
                 },
-                "finish_reason": "tool_calls",
+                "finish_reason": "stop",
             }
         ],
     }
@@ -51,7 +42,7 @@ async def test_generate_happy_path() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            json=_tool_response(
+            json=_json_response(
                 {
                     "reply": "Привет! Какая услуга интересует?",
                     "next_step_id": 5,
@@ -84,7 +75,7 @@ async def test_portfolio_request_flag_propagates() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            json=_tool_response(
+            json=_json_response(
                 {
                     "reply": "Сейчас покажу пару работ.",
                     "escalate": False,
@@ -104,6 +95,34 @@ async def test_portfolio_request_flag_propagates() -> None:
     assert result.portfolio_request is True
 
 
+async def test_unwraps_markdown_fenced_json() -> None:
+    """Models sometimes wrap JSON in ```json ... ``` despite instructions."""
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        body = (
+            "```json\n"
+            + json.dumps({"reply": "ok", "escalate": False, "portfolio_request": False})
+            + "\n```"
+        )
+        return httpx.Response(
+            200,
+            json={
+                "id": "x",
+                "model": "deepseek-v4-flash",
+                "choices": [
+                    {"message": {"role": "assistant", "content": body}, "finish_reason": "stop"}
+                ],
+            },
+        )
+
+    provider = _provider(handler)
+    try:
+        result = await provider.generate(system_prompt="x", history=[], user_message="hi")
+    finally:
+        await provider.aclose()
+    assert result.reply == "ok"
+
+
 async def test_retries_on_5xx_then_succeeds() -> None:
     calls = {"n": 0}
 
@@ -113,7 +132,7 @@ async def test_retries_on_5xx_then_succeeds() -> None:
             return httpx.Response(503, text="oops")
         return httpx.Response(
             200,
-            json=_tool_response({"reply": "ok", "escalate": False, "portfolio_request": False}),
+            json=_json_response({"reply": "ok", "escalate": False, "portfolio_request": False}),
         )
 
     cfg = DeepSeekConfig(api_key="key", max_http_retries=3)
@@ -121,7 +140,6 @@ async def test_retries_on_5xx_then_succeeds() -> None:
     client = httpx.AsyncClient(transport=transport)
 
     provider = DeepSeekProvider(cfg, client=client)
-    # Patch sleep so the test isn't slow.
     import app.llm.deepseek as ds_mod
 
     real_sleep = ds_mod.asyncio.sleep
@@ -163,18 +181,14 @@ async def test_retries_on_bad_json_then_succeeds() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         calls["n"] += 1
         if calls["n"] == 1:
-            # No tool_calls — bad shape, should trigger JSON-retry
+            # Plain text, not JSON — should trigger the json_retry path
             return httpx.Response(
                 200,
-                json={
-                    "choices": [
-                        {"message": {"role": "assistant", "content": "freeform text, no tool"}}
-                    ]
-                },
+                json={"choices": [{"message": {"role": "assistant", "content": "freeform text"}}]},
             )
         return httpx.Response(
             200,
-            json=_tool_response({"reply": "fixed", "escalate": False, "portfolio_request": False}),
+            json=_json_response({"reply": "fixed", "escalate": False, "portfolio_request": False}),
         )
 
     cfg = DeepSeekConfig(api_key="key", json_retry_attempts=1)
@@ -195,7 +209,7 @@ async def test_raises_when_reply_field_missing() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            json=_tool_response({"escalate": False, "portfolio_request": False}),
+            json=_json_response({"escalate": False, "portfolio_request": False}),
         )
 
     provider = _provider(handler)

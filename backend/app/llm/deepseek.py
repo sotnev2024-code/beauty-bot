@@ -1,8 +1,10 @@
-"""DeepSeek LLM provider — OpenAI-compatible Chat Completions API with function calling.
+"""DeepSeek LLM provider — OpenAI-compatible Chat Completions API.
 
-We force a single tool call (`reply_to_client`) so the model returns a structured
-JSON we control. JSON-shape failures trigger one retry with a strong reminder;
-HTTP errors get short exponential backoff (see _post_with_retries).
+We ask the model to return a JSON object with a fixed schema via
+`response_format={"type": "json_object"}` plus a strong system instruction.
+This works on every DeepSeek model (including reasoner, which doesn't
+support forced function-calling). Bad JSON triggers one corrective retry;
+HTTP errors back off and retry up to max_http_retries.
 """
 
 from __future__ import annotations
@@ -19,59 +21,18 @@ from app.llm.base import LLMMessage, LLMProvider, LLMResult, LLMServiceError
 
 log = logging.getLogger(__name__)
 
-REPLY_TOOL_NAME = "reply_to_client"
 
-REPLY_TOOL: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": REPLY_TOOL_NAME,
-        "description": (
-            "Always call this function with the assistant's response and funnel "
-            "metadata. Never reply outside of this function call."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "reply": {
-                    "type": "string",
-                    "description": "Текст, который бот отправит клиенту от лица мастера.",
-                },
-                "next_step_id": {
-                    "type": ["integer", "null"],
-                    "description": (
-                        "ID следующего шага воронки, если переход случился; "
-                        "null — оставаться на текущем."
-                    ),
-                },
-                "escalate": {
-                    "type": "boolean",
-                    "description": (
-                        "true, если нужна ручная помощь мастера "
-                        "(жалоба, неоднозначная ситуация)."
-                    ),
-                },
-                "collected_data": {
-                    "type": "object",
-                    "additionalProperties": True,
-                    "description": "Поля, собранные на этом шаге (имя, телефон, услуга, ...).",
-                },
-                "slot_intent": {
-                    "type": ["object", "null"],
-                    "additionalProperties": True,
-                    "description": (
-                        "Если клиент подтвердил конкретное время — объект "
-                        "{starts_at: ISO-8601, service_id?: int}; иначе null."
-                    ),
-                },
-                "portfolio_request": {
-                    "type": "boolean",
-                    "description": "true, если клиент попросил показать примеры работ.",
-                },
-            },
-            "required": ["reply", "escalate", "portfolio_request"],
-        },
-    },
+SCHEMA_INSTRUCTION = """Ты ВСЕГДА отвечаешь ОДНИМ JSON-объектом, без markdown
+и без пояснений. Структура:
+{
+  "reply": "<строка — твой ответ клиенту>",
+  "next_step_id": <integer | null — id следующего шага воронки или null>,
+  "escalate": <boolean — нужна ли ручная помощь мастера>,
+  "collected_data": {<object — поля, собранные на этом шаге>},
+  "slot_intent": <object | null — {starts_at: ISO-8601, service_id?: int} или null>,
+  "portfolio_request": <boolean — попросил ли клиент примеры работ>
 }
+Поля reply, escalate, portfolio_request обязательны."""
 
 
 @dataclass(slots=True)
@@ -119,19 +80,18 @@ class DeepSeekProvider(LLMProvider):
         for attempt in range(self._cfg.json_retry_attempts + 1):
             response = await self._post_with_retries(messages)
             try:
-                return self._parse_tool_call(response)
+                return self._parse_json_content(response)
             except LLMServiceError as e:
                 last_err = e
                 log.warning("LLM JSON parse failure (attempt %s): %s", attempt + 1, e)
-                # Reinforce the instruction and retry once
                 messages = [
                     *messages,
                     {
                         "role": "system",
                         "content": (
-                            "Предыдущий ответ был некорректным. ВЫЗОВИ функцию "
-                            f"{REPLY_TOOL_NAME} с обязательными полями reply, escalate, "
-                            "portfolio_request. Не пиши свободный текст."
+                            "Предыдущий ответ был некорректным. Верни ТОЛЬКО JSON-объект "
+                            "со схемой {reply, next_step_id, escalate, collected_data, "
+                            "slot_intent, portfolio_request}. Без markdown, без обёртки."
                         ),
                     },
                 ]
@@ -146,7 +106,9 @@ class DeepSeekProvider(LLMProvider):
         history: list[LLMMessage],
         user_message: str,
     ) -> list[dict[str, Any]]:
-        msgs: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+        # Prepend the schema instruction to whatever the funnel system_prompt is.
+        full_system = system_prompt.rstrip() + "\n\n" + SCHEMA_INSTRUCTION
+        msgs: list[dict[str, Any]] = [{"role": "system", "content": full_system}]
         for m in history:
             msgs.append({"role": m.role, "content": m.content})
         msgs.append({"role": "user", "content": user_message})
@@ -157,8 +119,7 @@ class DeepSeekProvider(LLMProvider):
         payload = {
             "model": self._cfg.model,
             "messages": messages,
-            "tools": [REPLY_TOOL],
-            "tool_choice": {"type": "function", "function": {"name": REPLY_TOOL_NAME}},
+            "response_format": {"type": "json_object"},
             "temperature": 0.4,
         }
         headers = {
@@ -192,27 +153,31 @@ class DeepSeekProvider(LLMProvider):
 
         raise LLMServiceError(f"deepseek unreachable: {last_exc}") from last_exc
 
-    def _parse_tool_call(self, response: dict[str, Any]) -> LLMResult:
+    def _parse_json_content(self, response: dict[str, Any]) -> LLMResult:
         try:
             choice = response["choices"][0]
-            message = choice["message"]
-            tool_calls = message.get("tool_calls") or []
-            if not tool_calls:
-                raise LLMServiceError("model did not return a tool_call")
-
-            call = tool_calls[0]
-            fn = call.get("function") or {}
-            if fn.get("name") != REPLY_TOOL_NAME:
-                raise LLMServiceError(f"unexpected tool: {fn.get('name')!r}")
-
-            arguments_raw = fn.get("arguments") or "{}"
-            args = json.loads(arguments_raw) if isinstance(arguments_raw, str) else arguments_raw
-        except (KeyError, IndexError, json.JSONDecodeError) as e:
+            content = choice["message"]["content"] or ""
+        except (KeyError, IndexError) as e:
             raise LLMServiceError(f"malformed LLM response: {e}") from e
+
+        # Models occasionally wrap JSON in markdown fences despite the prompt.
+        cleaned = content.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].lstrip("\n")
+
+        try:
+            args = json.loads(cleaned)
+        except json.JSONDecodeError as e:
+            raise LLMServiceError(f"content is not valid JSON: {e}") from e
+
+        if not isinstance(args, dict):
+            raise LLMServiceError("LLM JSON is not an object")
 
         reply = args.get("reply")
         if not isinstance(reply, str) or not reply.strip():
-            raise LLMServiceError("missing 'reply' in tool arguments")
+            raise LLMServiceError("missing 'reply' in JSON")
 
         return LLMResult(
             reply=reply.strip(),
