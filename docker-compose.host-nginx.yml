@@ -1,0 +1,86 @@
+# Production compose for a server where the host already runs nginx (TLS,
+# vhosts) for other projects. We bring up only db + redis + backend + a
+# one-shot frontend builder. The host nginx terminates TLS and reverse-
+# proxies /api → 127.0.0.1:8002, serves the Mini App static bundle from
+# /var/www/crm.plus-shop.ru, and serves /portfolio/ from /var/www/portfolio.
+#
+# Usage:
+#   docker compose -f docker-compose.host-nginx.yml run --rm frontend-build
+#   docker compose -f docker-compose.host-nginx.yml up -d --build
+#   docker compose -f docker-compose.host-nginx.yml exec backend alembic upgrade head
+#
+# All host-side ports bind to 127.0.0.1 only — the host nginx is the only
+# thing exposed to the internet, exactly like the existing pay/shop/pic
+# projects on this VPS.
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"   # loopback only — for `psql` from the host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "false"
+    restart: always
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8002:8000"
+    volumes:
+      # Bind-mount so the host nginx can serve /portfolio/ directly.
+      - /var/www/portfolio:/var/www/portfolio
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*"
+
+  # One-shot service: builds the Mini App static bundle into the host's
+  # /var/www/crm.plus-shop.ru. Re-run on every deploy.
+  frontend-build:
+    image: node:20-alpine
+    profiles: ["build"]
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /var/www/crm.plus-shop.ru:/dist
+    environment:
+      - PNPM_HOME=/usr/local/share/pnpm
+    command: >
+      sh -c "corepack enable && corepack prepare pnpm@10.33.2 --activate &&
+             pnpm install --frozen-lockfile &&
+             pnpm build &&
+             rm -rf /dist/* &&
+             cp -r dist/. /dist/ &&
+             chmod -R a+rX /dist"
+
+volumes:
+  pgdata:

@@ -3,6 +3,78 @@
 Production stack on Timeweb Cloud (Linux VPS, 4 vCPU / 8 GB RAM / 80 GB SSD).
 Domain: `crm.plus-shop.ru` (A-record points to the VPS).
 
+Two supported deployment shapes — pick **A** when the host already runs
+nginx + certbot for other projects (this is the case for the current prod
+VPS, which serves `pay/shop/pic/picpulse`). Pick **B** for a fresh /
+dedicated VPS.
+
+---
+
+## A. Host-nginx scenario (this VPS)
+
+The host nginx terminates TLS and reverse-proxies to a dockerized backend.
+We don't run our own nginx container, so existing vhosts are untouched.
+
+```bash
+# 1. Clone (on the server)
+git clone https://github.com/sotnev2024-code/beauty-bot.git /opt/beauty-bot
+cd /opt/beauty-bot
+
+# 2. .env — scp from the dev machine, or paste via $EDITOR
+cp .env.example .env
+$EDITOR .env
+
+# 3. Prepare host directories that bind-mounts use
+sudo mkdir -p /var/www/crm.plus-shop.ru /var/www/portfolio
+sudo chown -R "$USER":"$USER" /var/www/crm.plus-shop.ru /var/www/portfolio
+
+# 4. Build the Mini App bundle into /var/www/crm.plus-shop.ru
+docker compose -f docker-compose.host-nginx.yml --profile build run --rm frontend-build
+
+# 5. Bring up db + redis + backend (loopback-only ports)
+docker compose -f docker-compose.host-nginx.yml up -d --build
+docker compose -f docker-compose.host-nginx.yml exec backend alembic upgrade head
+
+# 6. Install the system-nginx vhost
+sudo cp nginx/crm.plus-shop.ru.conf /etc/nginx/sites-available/crm.plus-shop.ru
+sudo ln -sf /etc/nginx/sites-available/crm.plus-shop.ru /etc/nginx/sites-enabled/crm.plus-shop.ru
+sudo nginx -t && sudo systemctl reload nginx
+
+# 7. Issue the Let's Encrypt cert via the existing certbot
+sudo certbot --nginx -d crm.plus-shop.ru --non-interactive --agree-tos \
+  -m "$(grep ^LETSENCRYPT_EMAIL .env | cut -d= -f2)"
+sudo systemctl reload nginx
+
+# 8. Sanity
+curl https://crm.plus-shop.ru/api/health   # → {"status":"ok",...}
+curl -I https://crm.plus-shop.ru/          # → 200, serves index.html
+```
+
+**Re-deploy after a code change** (what GitHub Actions runs):
+
+```bash
+cd /opt/beauty-bot
+git pull
+docker compose -f docker-compose.host-nginx.yml --profile build run --rm frontend-build
+docker compose -f docker-compose.host-nginx.yml up -d --build
+docker compose -f docker-compose.host-nginx.yml exec -T backend alembic upgrade head
+```
+
+**Rollback** — fully reverses without touching other vhosts:
+
+```bash
+sudo rm /etc/nginx/sites-enabled/crm.plus-shop.ru
+sudo nginx -t && sudo systemctl reload nginx
+docker compose -f docker-compose.host-nginx.yml down
+```
+
+---
+
+## B. Standalone scenario (fresh VPS)
+
+Use `docker-compose.prod.yml` (own nginx container terminating TLS on 80/443).
+Only safe on a server that doesn't already serve other domains on those ports.
+
 ## 1. One-time server preparation
 
 ```bash
