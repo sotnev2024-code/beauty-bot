@@ -21,6 +21,10 @@ class Service(IdMixin, TimestampMixin, Base):
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     group: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("service_categories.id", ondelete="SET NULL"), nullable=True
+    )
+    reminder_after_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     master: Mapped["Master"] = relationship(back_populates="services")

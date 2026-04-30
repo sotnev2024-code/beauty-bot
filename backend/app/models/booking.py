@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, IdMixin, TimestampMixin
@@ -33,6 +33,12 @@ class Booking(IdMixin, TimestampMixin, Base):
     price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     source: Mapped[str | None] = mapped_column(String(32), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    discount_applied: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    discount_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    return_campaign_id: Mapped[int | None] = mapped_column(
+        ForeignKey("return_campaigns.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+    )
 
     master: Mapped["Master"] = relationship(back_populates="bookings")
     client: Mapped["Client"] = relationship(back_populates="bookings")

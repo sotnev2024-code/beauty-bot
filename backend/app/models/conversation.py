@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, IdMixin, TimestampMixin
@@ -49,5 +49,6 @@ class Message(IdMixin, TimestampMixin, Base):
     direction: Mapped[MessageDirection] = mapped_column(String(8), nullable=False)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
     llm_meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    is_proactive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
