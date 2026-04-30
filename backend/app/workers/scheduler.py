@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from sqlalchemy import select
 
 from app.core.db import session_factory
 from app.services.billing import expire_lapsed_subscriptions
+from app.services.insights import generate_for_master
 from app.services.reminders import deliver_due_reminders
+from app.services.segments import recompute_all as recompute_segments_all
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +54,38 @@ async def expire_subscriptions_tick() -> None:
             await session.rollback()
 
 
+async def segments_tick() -> None:
+    async with session_factory() as session:
+        try:
+            n = await recompute_segments_all(session)
+            await session.commit()
+            log.info("segments recomputed: %s", n)
+        except Exception:
+            log.exception("segments_tick failed")
+            await session.rollback()
+
+
+async def insights_tick() -> None:
+    from app.llm.factory import _provider, get_llm
+    from app.models import Master
+
+    try:
+        llm = get_llm() if _provider is not None else None
+    except Exception:
+        llm = None
+
+    async with session_factory() as session:
+        try:
+            masters = (await session.execute(select(Master))).scalars().all()
+            for m in masters:
+                await generate_for_master(session, master=m, llm=llm)
+            await session.commit()
+            log.info("insights generated for %s masters", len(masters))
+        except Exception:
+            log.exception("insights_tick failed")
+            await session.rollback()
+
+
 def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -63,6 +98,23 @@ def start_scheduler() -> AsyncIOScheduler:
         hour=3,
         minute=0,
         id="expire_subscriptions",
+        max_instances=1,
+    )
+    sched.add_job(
+        segments_tick,
+        "cron",
+        hour=3,
+        minute=15,
+        id="segments_tick",
+        max_instances=1,
+    )
+    sched.add_job(
+        insights_tick,
+        "cron",
+        day_of_week="mon",
+        hour=4,
+        minute=0,
+        id="insights_tick",
         max_instances=1,
     )
     sched.start()

@@ -7,6 +7,7 @@ from app.api.miniapp import (
     clients,
     conversations,
     funnels,
+    insights,
     me,
     portfolio,
     schedule,
@@ -26,3 +27,4 @@ router.include_router(conversations.router)
 router.include_router(analytics.router)
 router.include_router(portfolio.router)
 router.include_router(billing.router)
+router.include_router(insights.router)

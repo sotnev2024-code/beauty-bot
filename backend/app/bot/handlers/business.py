@@ -164,6 +164,22 @@ async def on_business_message(message: Message) -> None:
                 )
             except Exception:
                 log.exception("business_message: failed to deliver bot reply")
+
+            # Send portfolio if the LLM flagged the request.
+            meta = out_msg.llm_meta or {}
+            if meta.get("portfolio_request"):
+                from app.services.portfolio import send_portfolio_photos
+
+                try:
+                    await send_portfolio_photos(
+                        bot=get_bot(),
+                        master_id=master.id,
+                        chat_id=message.chat.id,
+                        session=session,
+                        business_connection_id=message.business_connection_id,
+                    )
+                except Exception:
+                    log.exception("business_message: portfolio send failed")
         else:
             await session.commit()
 
