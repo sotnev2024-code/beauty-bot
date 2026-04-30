@@ -59,8 +59,8 @@ export interface ServiceCreate {
   name: string;
   duration_minutes: number;
   price: string;
-  description?: string;
-  group?: string;
+  description?: string | null;
+  group?: string | null;
   is_active?: boolean;
 }
 

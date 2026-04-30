@@ -11,9 +11,10 @@ interface Draft {
   name: string;
   duration: string;
   price: string;
+  category: string;
 }
 
-const NEW: Draft = { name: '', duration: '60', price: '1500' };
+const NEW: Draft = { name: '', duration: '60', price: '1500', category: '' };
 
 export function Services() {
   const nav = useNavigate();
@@ -36,6 +37,7 @@ export function Services() {
         name: draft.name.trim(),
         duration_minutes: Number(draft.duration),
         price: draft.price,
+        group: draft.category.trim() || null,
       });
       setDraft(NEW);
       await refresh();
@@ -102,6 +104,13 @@ export function Services() {
             placeholder="Например, классический маникюр"
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          />
+          <Input
+            label="Категория"
+            placeholder="Например, маникюр"
+            hint="Услуги одной категории группируются вместе"
+            value={draft.category}
+            onChange={(e) => setDraft({ ...draft, category: e.target.value })}
           />
           <div className="grid grid-cols-2 gap-3">
             <Input
