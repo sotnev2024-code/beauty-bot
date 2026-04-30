@@ -1,0 +1,10 @@
+export { BotHubPage } from './BotHubPage';
+export { BotGreetingPage } from './GreetingPage';
+export { BotVoicePage } from './VoicePage';
+export { BotFormatPage } from './FormatPage';
+export { BotServicesPage } from './ServicesPage';
+export { BotKnowledgePage } from './KnowledgePage';
+export { BotAutomationPage } from './AutomationPage';
+export { BotTimezonePage } from './TimezonePage';
+export { BotTestPage } from './TestPage';
+export { BotDisablePage } from './DisablePage';

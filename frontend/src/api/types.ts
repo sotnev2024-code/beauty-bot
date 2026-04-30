@@ -40,6 +40,8 @@ export interface OnboardingStatus {
   address_done: boolean;
   schedule_done: boolean;
   services_done: boolean;
+  voice_done: boolean;
+  // Legacy gate — backend always returns true now. Removed in Step 10.
   funnel_done: boolean;
   business_connected: boolean;
   complete: boolean;
@@ -52,6 +54,8 @@ export interface Service {
   price: string;
   description: string | null;
   group: string | null;
+  category_id: number | null;
+  reminder_after_days: number | null;
   is_active: boolean;
 }
 
@@ -61,7 +65,105 @@ export interface ServiceCreate {
   price: string;
   description?: string | null;
   group?: string | null;
+  category_id?: number | null;
+  reminder_after_days?: number | null;
   is_active?: boolean;
+}
+
+export type VoiceTone = 'warm' | 'neutral' | 'casual';
+export type MessageFormat = 'text' | 'buttons' | 'hybrid';
+
+export interface BotSettings {
+  master_id: number;
+  greeting: string;
+  voice_tone: VoiceTone;
+  message_format: MessageFormat;
+  is_enabled: boolean;
+  reminders_enabled: boolean;
+  configured_at: string | null;
+  updated_at: string;
+}
+
+export interface BotSettingsUpdate {
+  greeting?: string;
+  voice_tone?: VoiceTone;
+  message_format?: MessageFormat;
+  is_enabled?: boolean;
+}
+
+export interface ServiceCategory {
+  id: number;
+  master_id: number;
+  name: string;
+  position: number;
+  created_at: string;
+}
+
+export type KBType =
+  | 'address'
+  | 'payment'
+  | 'techniques'
+  | 'sterilization'
+  | 'preparation'
+  | 'whats_with'
+  | 'guarantees'
+  | 'restrictions'
+  | 'custom';
+
+export interface KnowledgeItem {
+  id: number;
+  master_id: number;
+  type: KBType;
+  title: string;
+  content: string;
+  geolocation_lat: number | null;
+  geolocation_lng: number | null;
+  yandex_maps_url: string | null;
+  is_short: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeItemCreate {
+  type: KBType;
+  title: string;
+  content: string;
+  geolocation_lat?: number | null;
+  geolocation_lng?: number | null;
+  yandex_maps_url?: string | null;
+  is_short?: boolean;
+  position?: number;
+}
+
+export interface ReturnSettings {
+  master_id: number;
+  is_enabled: boolean;
+  trigger_after_days: number;
+  discount_percent: number;
+  discount_valid_days: number;
+  configured_at: string | null;
+  updated_at: string;
+}
+
+export interface ReturnSettingsUpdate {
+  trigger_after_days?: number;
+  discount_percent?: number;
+  discount_valid_days?: number;
+}
+
+export interface ReturnCampaign {
+  id: number;
+  master_id: number;
+  client_id: number;
+  sent_at: string;
+  discount_percent: number;
+  discount_valid_until: string;
+  status: 'sent' | 'responded' | 'booked' | 'expired' | 'expired_late_response';
+  responded_at: string | null;
+  booking_id: number | null;
+  message_id: number | null;
+  created_at: string;
 }
 
 export interface ScheduleEntry {

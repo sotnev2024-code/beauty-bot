@@ -23,6 +23,18 @@ import {
   TestChatPage,
 } from '@/pages/app';
 import {
+  BotAutomationPage,
+  BotDisablePage,
+  BotFormatPage,
+  BotGreetingPage,
+  BotHubPage,
+  BotKnowledgePage,
+  BotServicesPage,
+  BotTestPage,
+  BotTimezonePage,
+  BotVoicePage,
+} from '@/pages/bot';
+import {
   Address,
   Connect,
   Done,
@@ -141,6 +153,17 @@ export default function App() {
                 <Route path="/app/analytics" element={<AnalyticsPage />} />
                 <Route path="/app/pricing" element={<PricingPage />} />
                 <Route path="/app/test-chat" element={<TestChatPage />} />
+
+                <Route path="/app/bot" element={<BotHubPage />} />
+                <Route path="/app/bot/greeting" element={<BotGreetingPage />} />
+                <Route path="/app/bot/voice" element={<BotVoicePage />} />
+                <Route path="/app/bot/format" element={<BotFormatPage />} />
+                <Route path="/app/bot/services" element={<BotServicesPage />} />
+                <Route path="/app/bot/knowledge" element={<BotKnowledgePage />} />
+                <Route path="/app/bot/automation" element={<BotAutomationPage />} />
+                <Route path="/app/bot/timezone" element={<BotTimezonePage />} />
+                <Route path="/app/bot/test" element={<BotTestPage />} />
+                <Route path="/app/bot/disable" element={<BotDisablePage />} />
               </Route>
             </Route>
 

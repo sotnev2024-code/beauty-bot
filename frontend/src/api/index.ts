@@ -2,6 +2,8 @@ import axios, { type AxiosInstance } from 'axios';
 
 import type {
   BookingDetail,
+  BotSettings,
+  BotSettingsUpdate,
   ClientDetail,
   ClientListItem,
   ConversationDetail,
@@ -10,12 +12,18 @@ import type {
   FunnelDetail,
   FunnelPresetSummary,
   FunnelSummary,
+  KnowledgeItem,
+  KnowledgeItemCreate,
   Master,
   MasterUpdate,
   OverviewData,
+  ReturnCampaign,
+  ReturnSettings,
+  ReturnSettingsUpdate,
   ScheduleBreak,
   ScheduleEntry,
   Service,
+  ServiceCategory,
   ServiceCreate,
   SlotsResponse,
   TimeOff,
@@ -165,12 +173,68 @@ export const TestDialog = {
     api
       .post<{
         reply: string;
-        next_step_id: number | null;
+        actions: { type: string; [k: string]: unknown }[];
         escalate: boolean;
-        portfolio_request: boolean;
-        slot_intent: Record<string, unknown> | null;
         collected_data: Record<string, unknown>;
       }>('/test/dialog', payload)
+      .then((r) => r.data),
+};
+
+export const BotSettings = {
+  get: () => api.get<BotSettings>('/bot/settings').then((r) => r.data),
+  update: (payload: BotSettingsUpdate) =>
+    api.patch<BotSettings>('/bot/settings', payload).then((r) => r.data),
+  enable: () => api.post<BotSettings>('/bot/enable').then((r) => r.data),
+  disable: () => api.post<BotSettings>('/bot/disable').then((r) => r.data),
+};
+
+export const Categories = {
+  list: () => api.get<ServiceCategory[]>('/categories').then((r) => r.data),
+  create: (payload: { name: string; position?: number }) =>
+    api.post<ServiceCategory>('/categories', payload).then((r) => r.data),
+  update: (id: number, payload: { name?: string; position?: number }) =>
+    api.patch<ServiceCategory>(`/categories/${id}`, payload).then((r) => r.data),
+  remove: (id: number) => api.delete(`/categories/${id}`).then(() => undefined),
+  reorder: (ordered_ids: number[]) =>
+    api
+      .post<ServiceCategory[]>('/categories/reorder', { ordered_ids })
+      .then((r) => r.data),
+};
+
+export const Knowledge = {
+  list: () => api.get<KnowledgeItem[]>('/bot/knowledge').then((r) => r.data),
+  create: (payload: KnowledgeItemCreate) =>
+    api.post<KnowledgeItem>('/bot/knowledge', payload).then((r) => r.data),
+  update: (id: number, payload: Partial<KnowledgeItemCreate>) =>
+    api.patch<KnowledgeItem>(`/bot/knowledge/${id}`, payload).then((r) => r.data),
+  remove: (id: number) =>
+    api.delete(`/bot/knowledge/${id}`).then(() => undefined),
+};
+
+export const ReturnSettingsApi = {
+  get: () => api.get<ReturnSettings>('/bot/return-settings').then((r) => r.data),
+  update: (payload: ReturnSettingsUpdate) =>
+    api.patch<ReturnSettings>('/bot/return-settings', payload).then((r) => r.data),
+  enable: () =>
+    api.post<ReturnSettings>('/bot/return-settings/enable').then((r) => r.data),
+  disable: () =>
+    api.post<ReturnSettings>('/bot/return-settings/disable').then((r) => r.data),
+};
+
+export const BotReminders = {
+  enable: () => api.post<BotSettings>('/bot/reminders/enable').then((r) => r.data),
+  disable: () =>
+    api.post<BotSettings>('/bot/reminders/disable').then((r) => r.data),
+};
+
+export const ReturnCampaigns = {
+  list: (params?: { status?: string; from_date?: string; to_date?: string }) =>
+    api
+      .get<ReturnCampaign[]>('/bot/return-campaigns', { params })
+      .then((r) => r.data),
+  forClient: (clientId: number) =>
+    api
+      .get<ReturnCampaign[]>(`/clients/${clientId}/return-history`)
       .then((r) => r.data),
 };
 
