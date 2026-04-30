@@ -170,10 +170,13 @@ Set these repository secrets in **Settings → Secrets → Actions**:
 - `SSH_HOST` — `31.130.150.174`
 - `SSH_USER` — `root`
 - `SSH_PASSWORD` — server password (or migrate to `SSH_PRIVATE_KEY`)
+- `SSH_PORT` — `2222` (current production VPS uses non-default SSH port; omit to fall back to 22)
 - `PROJECT_DIR` — `/opt/beauty-bot`
+- `COMPOSE_FILE` — `docker-compose.host-nginx.yml` for scenario A (current prod) or
+  `docker-compose.prod.yml` for scenario B. Omit to default to `docker-compose.host-nginx.yml`.
 
 Push to `main` → `.github/workflows/deploy.yml` SSH-pulls, rebuilds, and
-runs `alembic upgrade head`.
+runs `alembic upgrade head` against the configured compose file.
 
 ## 6. Portfolio storage
 
