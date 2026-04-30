@@ -60,12 +60,12 @@ export function Services() {
     }
   };
 
-  const next = () => nav('/onboarding/funnel');
+  const next = () => nav('/onboarding/voice');
 
   return (
     <OnboardingShell
       step={5}
-      total={8}
+      total={7}
       title="Какие услуги ты предлагаешь?"
       subtitle="Минимум одну. Бот будет предлагать их клиенткам по этому списку."
       footer={

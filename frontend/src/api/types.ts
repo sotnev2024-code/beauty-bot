@@ -34,8 +34,6 @@ export interface OnboardingStatus {
   schedule_done: boolean;
   services_done: boolean;
   voice_done: boolean;
-  // Legacy gate — backend always returns true now. Removed in Step 10.
-  funnel_done: boolean;
   business_connected: boolean;
   complete: boolean;
 }

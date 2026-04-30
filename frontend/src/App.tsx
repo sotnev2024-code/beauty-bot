@@ -38,6 +38,7 @@ import {
   Profile,
   Schedule,
   Services,
+  Voice,
   Welcome,
 } from '@/pages/onboarding';
 import { useMaster } from '@/store/master';
@@ -78,6 +79,7 @@ const STEP_ROUTES: { key: keyof OnboardingStatus; route: string }[] = [
   { key: 'address_done', route: '/onboarding/address' },
   { key: 'schedule_done', route: '/onboarding/schedule' },
   { key: 'services_done', route: '/onboarding/services' },
+  { key: 'voice_done', route: '/onboarding/voice' },
 ];
 
 function NeedsOnboarding() {
@@ -128,6 +130,7 @@ export default function App() {
             <Route path="/onboarding/address" element={<Address />} />
             <Route path="/onboarding/schedule" element={<Schedule />} />
             <Route path="/onboarding/services" element={<Services />} />
+            <Route path="/onboarding/voice" element={<Voice />} />
             <Route path="/onboarding/connect" element={<Connect />} />
             <Route path="/onboarding/done" element={<Done />} />
             {/* Legacy redirects — bookmarks from the funnel era. */}

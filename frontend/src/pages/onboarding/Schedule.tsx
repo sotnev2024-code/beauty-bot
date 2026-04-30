@@ -41,7 +41,7 @@ export function Schedule() {
   return (
     <OnboardingShell
       step={4}
-      total={8}
+      total={7}
       title="График работы"
       subtitle="Можно подкрутить позже в настройках."
       footer={

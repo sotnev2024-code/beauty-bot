@@ -39,7 +39,7 @@ export function Connect() {
   return (
     <OnboardingShell
       step={7}
-      total={8}
+      total={7}
       title="Подключи Telegram Business"
       subtitle="Открой настройки Business в Telegram и добавь @beauty_dev_bot."
       footer={

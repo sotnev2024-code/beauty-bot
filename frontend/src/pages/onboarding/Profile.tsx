@@ -35,7 +35,7 @@ export function Profile() {
   return (
     <OnboardingShell
       step={2}
-      total={8}
+      total={7}
       title="Расскажи о себе"
       subtitle="Это видно только тебе и помогает боту звучать в твоём ключе."
       footer={

@@ -17,8 +17,8 @@ export function Done() {
 
   return (
     <OnboardingShell
-      step={8}
-      total={8}
+      step={7}
+      total={7}
       title="Всё готово"
       subtitle="Можешь открыть приложение или сразу попробовать как бот ответит — у нас есть тестовый чат."
       footer={

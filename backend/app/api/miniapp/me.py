@@ -57,11 +57,12 @@ async def onboarding_status(master: CurrentMaster, session: SessionDep) -> Onboa
     )
     business_connected = bool(has_biz or 0)
 
-    # `voice_done` is reported separately. We don't gate `complete` on it yet
-    # because the deployed frontend has no `/onboarding/voice` route to redirect
-    # to — that ships in Step 10.
     complete = (
-        profile_done and address_done and schedule_done and services_done
+        profile_done
+        and address_done
+        and schedule_done
+        and services_done
+        and voice_done
     )
     return OnboardingStatus(
         profile_done=profile_done,

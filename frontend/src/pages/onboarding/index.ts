@@ -5,4 +5,5 @@ export { Premium } from './Premium';
 export { Profile } from './Profile';
 export { Schedule } from './Schedule';
 export { Services } from './Services';
+export { Voice } from './Voice';
 export { Welcome } from './Welcome';

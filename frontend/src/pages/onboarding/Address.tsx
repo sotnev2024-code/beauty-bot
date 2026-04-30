@@ -26,7 +26,7 @@ export function Address() {
   return (
     <OnboardingShell
       step={3}
-      total={8}
+      total={7}
       title="Где ты принимаешь?"
       subtitle="Адрес салона или кабинета — бот сообщит его клиенткам после записи."
       footer={
