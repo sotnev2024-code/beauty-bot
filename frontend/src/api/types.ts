@@ -119,3 +119,94 @@ export interface ConversationSummary {
   last_message_at: string | null;
   last_message_preview: string | null;
 }
+
+export interface MessageRow {
+  id: number;
+  direction: MessageDirection;
+  text: string | null;
+  llm_meta: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ConversationDetail {
+  id: number;
+  client_id: number;
+  client_name: string | null;
+  state: ConversationState;
+  takeover_until: string | null;
+  last_message_at: string | null;
+  messages: MessageRow[];
+}
+
+export interface ClientStats {
+  visits_total: number;
+  visits_done: number;
+  avg_check: string | null;
+  last_visit_at: string | null;
+  tags: string[];
+  segments: string[];
+}
+
+export interface ClientDetail {
+  id: number;
+  telegram_id: number;
+  name: string | null;
+  phone: string | null;
+  notes: string | null;
+  stats: ClientStats;
+}
+
+export interface FunnelStep {
+  id: number;
+  position: number;
+  system_prompt: string;
+  goal: string | null;
+  transition_conditions: Record<string, unknown> | null;
+  collected_fields: string[] | null;
+}
+
+export interface FunnelDetail {
+  id: number;
+  name: string;
+  type: FunnelType;
+  is_active: boolean;
+  preset_key: string | null;
+  steps: FunnelStep[];
+}
+
+export interface ScheduleBreak {
+  id: number;
+  weekday: number;
+  start_time: string;
+  end_time: string;
+}
+
+export interface TimeOff {
+  id: number;
+  date_from: string;
+  date_to: string;
+  reason: string | null;
+}
+
+export interface OverviewData {
+  period_from: string;
+  period_to: string;
+  bookings_total: number;
+  bookings_done: number;
+  bookings_cancelled: number;
+  revenue: string;
+  new_clients: number;
+  active_conversations: number;
+}
+
+export interface SlotItem {
+  starts_at: string;
+  ends_at: string;
+}
+
+export interface SlotsResponse {
+  service_id: number;
+  duration_minutes: number;
+  slots: SlotItem[];
+  next_available_day: string | null;
+}

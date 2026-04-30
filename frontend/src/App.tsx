@@ -10,11 +10,17 @@ import {
 import { PhoneShell } from '@/components/PhoneShell';
 import { readyTelegram } from '@/lib/tg';
 import {
+  AnalyticsPage,
   AppLayout,
   Calendar,
+  ChatDetail,
+  ChatList,
   ClientsPage,
   Dashboard,
+  FunnelEditor,
   FunnelsPage,
+  SchedulePage,
+  ServicesPage,
   SettingsPage,
 } from '@/pages/app';
 import {
@@ -85,8 +91,14 @@ export default function App() {
                 <Route path="/app" element={<Dashboard />} />
                 <Route path="/app/calendar" element={<Calendar />} />
                 <Route path="/app/funnels" element={<FunnelsPage />} />
+                <Route path="/app/funnels/:id" element={<FunnelEditor />} />
                 <Route path="/app/clients" element={<ClientsPage />} />
+                <Route path="/app/chats" element={<ChatList />} />
+                <Route path="/app/chats/:id" element={<ChatDetail />} />
                 <Route path="/app/settings" element={<SettingsPage />} />
+                <Route path="/app/services" element={<ServicesPage />} />
+                <Route path="/app/schedule" element={<SchedulePage />} />
+                <Route path="/app/analytics" element={<AnalyticsPage />} />
               </Route>
             </Route>
 

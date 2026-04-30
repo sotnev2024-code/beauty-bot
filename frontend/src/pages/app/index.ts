@@ -1,6 +1,12 @@
+export { AnalyticsPage } from './AnalyticsPage';
 export { AppLayout } from './AppLayout';
 export { Calendar } from './Calendar';
+export { ChatDetail } from './ChatDetail';
+export { ChatList } from './ChatList';
 export { ClientsPage } from './ClientsPage';
 export { Dashboard } from './Dashboard';
+export { FunnelEditor } from './FunnelEditor';
 export { FunnelsPage } from './FunnelsPage';
+export { SchedulePage } from './SchedulePage';
+export { ServicesPage } from './ServicesPage';
 export { SettingsPage } from './SettingsPage';
