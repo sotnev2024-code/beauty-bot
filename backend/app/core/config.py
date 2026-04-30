@@ -34,10 +34,19 @@ class Settings(BaseSettings):
     PUBLIC_PORTFOLIO_URL: str = "https://crm.plus-shop.ru/portfolio"
     DOMAIN: str = "crm.plus-shop.ru"
 
-    # DeepSeek
+    # LLM provider selection: "kie" (default, gpt-5.2) or "deepseek" (legacy)
+    LLM_PROVIDER: str = "kie"
+
+    # DeepSeek (legacy fallback)
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_API_BASE: str = "https://api.deepseek.com"
     DEEPSEEK_MODEL: str = "deepseek-chat"
+
+    # kie.ai / GPT-5.2
+    KIE_API_KEY: str = ""
+    KIE_API_BASE: str = "https://api.kie.ai"
+    KIE_MODEL: str = "gpt-5-2"  # path segment in the URL
+    KIE_REASONING_EFFORT: str = "low"  # 'low' or 'high'
 
     # YooKassa
     YOOKASSA_SHOP_ID: str = ""

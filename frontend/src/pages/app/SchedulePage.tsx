@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 
 import { Schedule as ScheduleApi } from '@/api';
 import type { ScheduleBreak, ScheduleEntry, TimeOff } from '@/api/types';
@@ -46,11 +45,6 @@ export function SchedulePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex items-center justify-between">
-        <Link to="/app/settings" className="text-sm text-mute">
-          ← Настройки
-        </Link>
-      </header>
       <h1 className="font-display text-2xl text-ink">Расписание</h1>
 
       <div className="flex flex-col gap-2">

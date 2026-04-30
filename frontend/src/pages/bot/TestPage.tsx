@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 
 import { TestDialog } from '@/api';
 import { Button, Card, Input } from '@/components/ui';
@@ -67,10 +66,7 @@ export function BotTestPage() {
 
   return (
     <div className="flex flex-col gap-3 h-full">
-      <header className="flex items-center justify-between">
-        <Link to="/app/bot" className="text-sm text-mute">
-          ← Бот
-        </Link>
+      <header className="flex items-center justify-end">
         <Button size="md" variant="ghost" onClick={reset}>
           Сбросить
         </Button>

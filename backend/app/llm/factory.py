@@ -1,8 +1,11 @@
 """Lazy LLM provider singleton.
 
+Picks the provider implementation based on settings.LLM_PROVIDER:
+  - "kie"      → KieProvider (api.kie.ai/gpt-5-2)  [default]
+  - "deepseek" → DeepSeekProvider (api.deepseek.com)
+
 DeepSeek is reachable directly from Russia, so by default we don't route the
 LLM client through `HTTP_PROXY_URL` (which is meant for Telegram/YooKassa).
-Set `DEEPSEEK_PROXY_URL` explicitly if you need to override.
 """
 
 from __future__ import annotations
@@ -10,13 +13,30 @@ from __future__ import annotations
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.llm.deepseek import DeepSeekConfig, DeepSeekProvider
+from app.llm.kie import KieConfig, KieProvider
 
 _provider: LLMProvider | None = None
 
 
 def get_llm() -> LLMProvider:
     global _provider
-    if _provider is None:
+    if _provider is not None:
+        return _provider
+
+    name = (settings.LLM_PROVIDER or "kie").lower()
+    if name == "kie":
+        if not settings.KIE_API_KEY:
+            raise RuntimeError("KIE_API_KEY is not configured")
+        _provider = KieProvider(
+            KieConfig(
+                api_key=settings.KIE_API_KEY,
+                api_base=settings.KIE_API_BASE,
+                model_path=settings.KIE_MODEL,
+                reasoning_effort=settings.KIE_REASONING_EFFORT,
+            ),
+            proxy=None,
+        )
+    elif name == "deepseek":
         if not settings.DEEPSEEK_API_KEY:
             raise RuntimeError("DEEPSEEK_API_KEY is not configured")
         _provider = DeepSeekProvider(
@@ -25,8 +45,10 @@ def get_llm() -> LLMProvider:
                 api_base=settings.DEEPSEEK_API_BASE,
                 model=settings.DEEPSEEK_MODEL,
             ),
-            proxy=settings.DEEPSEEK_PROXY_URL or None,
+            proxy=None,
         )
+    else:
+        raise RuntimeError(f"unknown LLM_PROVIDER={name!r} (expected 'kie' or 'deepseek')")
     return _provider
 
 

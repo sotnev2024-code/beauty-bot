@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
-import { Analytics, type Master } from '@/api';
+import { Analytics } from '@/api';
+import type { DashboardData, Plan } from '@/api/types';
 import { Card } from '@/components/ui';
+import { tgPhotoUrl } from '@/lib/tg';
 import { useMaster } from '@/store/master';
-import type { DashboardData } from '@/api/types';
+
+const PLAN_LABEL: Record<Plan, string> = {
+  trial: 'Trial',
+  pro: 'Pro',
+  pro_plus: 'Pro+',
+};
 
 export function Dashboard() {
   const { master } = useMaster();
@@ -16,16 +24,49 @@ export function Dashboard() {
       .catch((e) => setError(String(e)));
   }, []);
 
+  const photoUrl = tgPhotoUrl();
+  const initials = (master?.name ?? 'M')
+    .split(/\s+/)
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <span className="text-xs uppercase tracking-wider text-mute font-medium">
-          Сегодня
-        </span>
-        <h1 className="font-display text-2xl text-ink">
-          Привет{master?.name ? `, ${master.name.split(' ')[0]}` : ''}!
-        </h1>
-      </header>
+      <Card>
+        <div className="flex items-center gap-3">
+          {photoUrl ? (
+            <img
+              src={photoUrl}
+              alt=""
+              className="w-14 h-14 rounded-full object-cover bg-divider"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-14 h-14 rounded-full bg-coral-grad text-white grid place-items-center font-display text-lg">
+              {initials}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="font-display text-xl text-ink truncate">
+              {master?.name ?? 'Мастер'}
+            </div>
+            {master?.niche && (
+              <div className="text-xs text-mute truncate">{master.niche}</div>
+            )}
+          </div>
+          {master && (
+            <Link
+              to="/app/pricing"
+              className="px-2.5 py-1 rounded-full text-xs font-semibold bg-accent-soft text-accent-dark whitespace-nowrap"
+            >
+              {PLAN_LABEL[master.plan]}
+            </Link>
+          )}
+        </div>
+      </Card>
 
       {error && (
         <Card>
@@ -40,19 +81,31 @@ export function Dashboard() {
         <Stat label="Выручка за неделю" value={fmtMoney(data?.week_revenue)} />
       </div>
 
-      <Card>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-col">
-            <span className="text-sm text-ink font-semibold">Бот включён</span>
-            <span className="text-xs text-mute">
-              {data?.pending_takeovers
-                ? `${data.pending_takeovers} чат(ов) на тебе`
-                : 'Все диалоги ведёт бот'}
-            </span>
-          </div>
-          <BotPill enabled={Boolean(data?.bot_enabled ?? master?.bot_enabled)} />
-        </div>
-      </Card>
+      <div className="text-xs uppercase tracking-wider text-mute font-semibold px-1 mt-2">
+        Разделы
+      </div>
+      <NavCard
+        to="/app/chats"
+        icon="💬"
+        title="Чаты"
+        subtitle={
+          data?.pending_takeovers
+            ? `${data.pending_takeovers} на вас`
+            : 'Все диалоги ведёт бот'
+        }
+      />
+      <NavCard
+        to="/app/clients"
+        icon="◉"
+        title="Клиенты"
+        subtitle="База, сегменты, история"
+      />
+      <NavCard
+        to="/app/analytics"
+        icon="📊"
+        title="Аналитика"
+        subtitle="Записи, выручка, инсайты"
+      />
     </div>
   );
 }
@@ -68,15 +121,34 @@ function Stat({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-function BotPill({ enabled }: { enabled: boolean }) {
+function NavCard({
+  to,
+  icon,
+  title,
+  subtitle,
+}: {
+  to: string;
+  icon: string;
+  title: string;
+  subtitle: string;
+}) {
   return (
-    <span
-      className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-        enabled ? 'bg-success/10 text-success' : 'bg-divider text-mute'
-      }`}
-    >
-      {enabled ? 'on' : 'off'}
-    </span>
+    <Link to={to} className="block">
+      <Card>
+        <div className="flex items-center gap-3">
+          <span className="text-xl leading-none" aria-hidden>
+            {icon}
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-ink text-[15px] leading-tight">{title}</div>
+            <div className="text-xs text-ink-soft mt-0.5">{subtitle}</div>
+          </div>
+          <span className="text-mute text-base leading-none" aria-hidden>
+            ›
+          </span>
+        </div>
+      </Card>
+    </Link>
   );
 }
 
@@ -86,6 +158,3 @@ function fmtMoney(v: string | number | undefined): string {
   if (Number.isNaN(n)) return '—';
   return `${Math.round(n).toLocaleString('ru-RU')} ₽`;
 }
-
-// Re-export for tree-shaking sanity.
-export type { Master };

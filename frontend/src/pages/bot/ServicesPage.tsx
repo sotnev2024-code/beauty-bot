@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 
 import { Categories, Services } from '@/api';
 import type { Service, ServiceCategory } from '@/api/types';
@@ -41,10 +40,7 @@ export function BotServicesPage() {
 
   return (
     <div className="flex flex-col gap-3">
-      <header className="flex items-center justify-between">
-        <Link to="/app/bot" className="text-sm text-mute">
-          ← Бот
-        </Link>
+      <header className="flex items-center justify-end">
         <Button size="md" onClick={() => setOpenSvc(null)}>
           + Услуга
         </Button>

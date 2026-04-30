@@ -14,11 +14,19 @@ declare global {
             first_name?: string;
             last_name?: string;
             username?: string;
+            photo_url?: string;
             language_code?: string;
           };
         };
         ready: () => void;
         expand: () => void;
+        disableVerticalSwipes?: () => void;
+        BackButton?: {
+          show: () => void;
+          hide: () => void;
+          onClick: (cb: () => void) => void;
+          offClick: (cb: () => void) => void;
+        };
         colorScheme?: 'light' | 'dark';
         themeParams?: Record<string, string>;
       };
@@ -34,10 +42,15 @@ export const isPremium = (): boolean => Boolean(tg?.initDataUnsafe.user?.is_prem
 
 export const tgUser = () => tg?.initDataUnsafe.user;
 
+export const tgPhotoUrl = (): string | null => tg?.initDataUnsafe.user?.photo_url ?? null;
+
 export function readyTelegram(): void {
   try {
     tg?.ready();
     tg?.expand();
+    // Prevent the Mini App from collapsing back to its launcher height when
+    // the user pulls down or scrolls the page.
+    tg?.disableVerticalSwipes?.();
   } catch {
     // outside Telegram — no-op
   }

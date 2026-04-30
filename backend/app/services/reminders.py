@@ -1,20 +1,29 @@
-"""Reminder templates + send / schedule helpers."""
+"""Reminder templates + send / schedule helpers.
+
+Two delivery channels:
+  * client-targeted (BOOKING_24H/2H, FEEDBACK, RETURN_TRIGGER) — sent to
+    the client's chat via the master's Business connection.
+  * master-targeted (MASTER_BOOKING_1H, MASTER_BOOKING_10M,
+    MASTER_DAILY_DIGEST) — sent directly to master.telegram_id (DM with
+    the bot, no Business connection).
+"""
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Booking, Client, Master, Reminder, ReminderType
+from app.models import Booking, BookingStatus, Client, Master, Reminder, ReminderType
 
 log = logging.getLogger(__name__)
 
 
-# Format strings — referenced by send_reminder.
-TEMPLATES: dict[ReminderType, str] = {
+# Format strings for client-targeted reminders.
+CLIENT_TEMPLATES: dict[ReminderType, str] = {
     ReminderType.BOOKING_24H: (
         "Привет, {client_name}! Напоминаю, завтра в {time} у нас запись."
         "{service_line} До встречи!"
@@ -33,6 +42,24 @@ TEMPLATES: dict[ReminderType, str] = {
     ),
 }
 
+# Master-targeted alerts.
+MASTER_TEMPLATES: dict[ReminderType, str] = {
+    ReminderType.MASTER_BOOKING_1H: (
+        "🔔 Через час придёт {client_name} в {time}.{service_line}"
+    ),
+    ReminderType.MASTER_BOOKING_10M: (
+        "⏰ Через 10 минут — {client_name} ({time}).{service_line}"
+    ),
+}
+
+
+def _is_master_reminder(t: ReminderType) -> bool:
+    return t in (
+        ReminderType.MASTER_BOOKING_1H,
+        ReminderType.MASTER_BOOKING_10M,
+        ReminderType.MASTER_DAILY_DIGEST,
+    )
+
 
 def render(
     type_: ReminderType,
@@ -41,9 +68,12 @@ def render(
     starts_at_local: str,
     service_name: str | None,
 ) -> str:
+    template = MASTER_TEMPLATES.get(type_) or CLIENT_TEMPLATES.get(type_)
+    if template is None:
+        return ""
     service_line = f" Услуга: {service_name}." if service_name else ""
-    return TEMPLATES[type_].format(
-        client_name=client_name or "",
+    return template.format(
+        client_name=client_name or "клиент",
         time=starts_at_local,
         service_line=service_line,
     )
@@ -54,9 +84,19 @@ async def schedule_booking_reminders(
     *,
     booking: Booking,
 ) -> list[Reminder]:
-    """Create reminder rows for a fresh booking. APScheduler picks them up."""
+    """Create reminder rows for a fresh booking. APScheduler picks them up.
+
+    Schedules four entries:
+      * client BOOKING_24H (only if 24h ahead is still in the future)
+      * client BOOKING_2H
+      * master MASTER_BOOKING_1H
+      * master MASTER_BOOKING_10M
+      * client FEEDBACK (2h after the booking ends)
+    """
     rows: list[Reminder] = []
-    if booking.starts_at - timedelta(hours=24) > datetime.now(booking.starts_at.tzinfo):
+    now = datetime.now(booking.starts_at.tzinfo)
+
+    if booking.starts_at - timedelta(hours=24) > now:
         rows.append(
             Reminder(
                 type=ReminderType.BOOKING_24H,
@@ -65,14 +105,33 @@ async def schedule_booking_reminders(
                 client_id=booking.client_id,
             )
         )
-    rows.append(
-        Reminder(
-            type=ReminderType.BOOKING_2H,
-            target_at=booking.starts_at - timedelta(hours=2),
-            booking_id=booking.id,
-            client_id=booking.client_id,
+    if booking.starts_at - timedelta(hours=2) > now:
+        rows.append(
+            Reminder(
+                type=ReminderType.BOOKING_2H,
+                target_at=booking.starts_at - timedelta(hours=2),
+                booking_id=booking.id,
+                client_id=booking.client_id,
+            )
         )
-    )
+    if booking.starts_at - timedelta(hours=1) > now:
+        rows.append(
+            Reminder(
+                type=ReminderType.MASTER_BOOKING_1H,
+                target_at=booking.starts_at - timedelta(hours=1),
+                booking_id=booking.id,
+                client_id=booking.client_id,
+            )
+        )
+    if booking.starts_at - timedelta(minutes=10) > now:
+        rows.append(
+            Reminder(
+                type=ReminderType.MASTER_BOOKING_10M,
+                target_at=booking.starts_at - timedelta(minutes=10),
+                booking_id=booking.id,
+                client_id=booking.client_id,
+            )
+        )
     rows.append(
         Reminder(
             type=ReminderType.FEEDBACK,
@@ -98,7 +157,7 @@ async def deliver_due_reminders(
 
     Returns the number of reminders dispatched.
     """
-    now = now or datetime.now(tz=__import__("datetime").UTC)
+    now = now or datetime.now(tz=UTC)
     result = await session.execute(
         select(Reminder)
         .where(Reminder.target_at <= now, Reminder.sent_at.is_(None))
@@ -122,6 +181,16 @@ async def deliver_due_reminders(
             r.sent_at = now
             continue
 
+        # Skip pre-visit reminders for cancelled/no-show bookings.
+        if r.type in (
+            ReminderType.BOOKING_24H,
+            ReminderType.BOOKING_2H,
+            ReminderType.MASTER_BOOKING_1H,
+            ReminderType.MASTER_BOOKING_10M,
+        ) and booking.status in (BookingStatus.CANCELLED, BookingStatus.NO_SHOW):
+            r.sent_at = now
+            continue
+
         starts_local = booking.starts_at.astimezone(_master_tz(master)).strftime("%H:%M")
         text = render(
             r.type,
@@ -129,13 +198,26 @@ async def deliver_due_reminders(
             starts_at_local=starts_local,
             service_name=service_name,
         )
+        if not text:
+            r.sent_at = now
+            continue
 
         try:
-            await sender(
-                client_telegram_id=client.telegram_id,
-                business_connection_id=await _active_business_connection_id(session, master.id),
-                text=text,
-            )
+            if _is_master_reminder(r.type):
+                # Direct DM to the master.
+                await sender(
+                    client_telegram_id=master.telegram_id,
+                    business_connection_id=None,
+                    text=text,
+                )
+            else:
+                await sender(
+                    client_telegram_id=client.telegram_id,
+                    business_connection_id=await _active_business_connection_id(
+                        session, master.id
+                    ),
+                    text=text,
+                )
             r.sent_at = now
             sent += 1
         except Exception:
@@ -158,9 +240,7 @@ async def _active_business_connection_id(session: AsyncSession, master_id: int) 
     return row.telegram_business_connection_id if row else None
 
 
-def _master_tz(master: Master):
-    from zoneinfo import ZoneInfo
-
+def _master_tz(master: Master) -> ZoneInfo:
     try:
         return ZoneInfo(master.timezone)
     except Exception:

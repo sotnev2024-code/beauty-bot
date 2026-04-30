@@ -30,6 +30,10 @@ class ReminderType(StrEnum):
     BOOKING_2H = "booking_2h"
     FEEDBACK = "feedback"
     RETURN_TRIGGER = "return_trigger"
+    # Master-targeted alerts (sent via direct bot DM, not Business connection):
+    MASTER_BOOKING_1H = "master_booking_1h"
+    MASTER_BOOKING_10M = "master_booking_10m"
+    MASTER_DAILY_DIGEST = "master_daily_digest"
 
 
 class Segment(StrEnum):

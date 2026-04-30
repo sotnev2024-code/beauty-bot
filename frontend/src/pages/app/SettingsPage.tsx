@@ -24,15 +24,6 @@ export function SettingsPage() {
     <div className="flex flex-col gap-4">
       <h1 className="font-display text-2xl text-ink">Настройки</h1>
 
-      <NavItem
-        to="/app/bot"
-        title="Бот"
-        subtitle="Приветствие, голос, услуги, база знаний и автоматизация"
-      />
-      <NavItem to="/app/schedule" title="Расписание" subtitle="Часы работы, перерывы, отпуска" />
-      <NavItem to="/app/analytics" title="Аналитика" subtitle="Записи, выручка, инсайты" />
-      <NavItem to="/app/chats" title="Чаты" subtitle="Перехват и контроль диалогов" />
-
       <Card>
         <div className="flex flex-col gap-3">
           <Input label="Имя" value={name} onChange={(e) => setName(e.target.value)} />
@@ -42,16 +33,23 @@ export function SettingsPage() {
         </div>
       </Card>
 
+      <NavItem to="/app/pricing" title="Тариф" subtitle={planLabel(master.plan)} />
+
       <Card>
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-mute uppercase tracking-wider">Тариф</span>
-          <span className="text-sm text-ink font-semibold">
-            {master.plan === 'trial' ? 'Trial · 14 дней бесплатно' : master.plan.toUpperCase()}
-          </span>
+          <span className="text-xs text-mute uppercase tracking-wider">Версия</span>
+          <span className="text-sm text-ink-soft">Beauty.dev · v1.0</span>
         </div>
       </Card>
     </div>
   );
+}
+
+function planLabel(plan: string): string {
+  if (plan === 'trial') return 'Trial · 14 дней бесплатно';
+  if (plan === 'pro') return 'Pro · активен';
+  if (plan === 'pro_plus') return 'Pro+ · активен';
+  return plan.toUpperCase();
 }
 
 function NavItem({

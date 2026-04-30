@@ -12,6 +12,7 @@ from app.services.billing import expire_lapsed_subscriptions
 from app.services.insights import generate_for_master
 from app.services.reminders import deliver_due_reminders
 from app.services.segments import recompute_all as recompute_segments_all
+from app.workers.master_digest import send_due_master_digests
 from app.workers.return_campaigns import (
     expire_due_campaigns,
     send_due_return_invitations,
@@ -91,6 +92,18 @@ async def service_reminders_tick() -> None:
                 log.info("service reminders dispatched: %s", n)
         except Exception:
             log.exception("service_reminders_tick failed")
+            await session.rollback()
+
+
+async def master_digest_tick() -> None:
+    async with session_factory() as session:
+        try:
+            n = await send_due_master_digests(session, sender=_send_via_bot)
+            await session.commit()
+            if n:
+                log.info("master daily digests dispatched: %s", n)
+        except Exception:
+            log.exception("master_digest_tick failed")
             await session.rollback()
 
 
@@ -178,6 +191,13 @@ def start_scheduler() -> AsyncIOScheduler:
         "cron",
         minute=15,
         id="expire_return_campaigns_tick",
+        max_instances=1,
+    )
+    sched.add_job(
+        master_digest_tick,
+        "cron",
+        minute=0,
+        id="master_digest_tick",
         max_instances=1,
     )
     sched.start()

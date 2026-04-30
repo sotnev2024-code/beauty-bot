@@ -4,14 +4,13 @@ const TABS = [
   { to: '/app', label: 'Главная', icon: '◇' },
   { to: '/app/calendar', label: 'Календарь', icon: '▥' },
   { to: '/app/bot', label: 'Бот', icon: '☆' },
-  { to: '/app/clients', label: 'Клиенты', icon: '◉' },
   { to: '/app/settings', label: 'Настройки', icon: '⚙' },
 ];
 
 export function TabBar() {
   return (
     <nav className="sticky bottom-0 z-10 bg-card border-t border-divider px-2 pb-[env(safe-area-inset-bottom)]">
-      <div className="grid grid-cols-5 gap-1 py-2">
+      <div className="grid grid-cols-4 gap-1 py-2">
         {TABS.map((t) => (
           <NavLink
             key={t.to}

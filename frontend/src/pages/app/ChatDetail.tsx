@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 
 import { Clients, Conversations, ReturnCampaigns } from '@/api';
 import type {
@@ -59,10 +59,7 @@ export function ChatDetail() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex items-center justify-between gap-3">
-        <Link to="/app/chats" className="text-sm text-mute">
-          ← Чаты
-        </Link>
+      <header className="flex items-center justify-end gap-3">
         <div className="flex flex-col items-end">
           <span className="text-sm font-semibold text-ink truncate max-w-[180px]">
             {conv.client_name ?? `tg:${conv.client_id}`}

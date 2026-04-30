@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { BotSettings } from '@/api';
 import { Button, Card, Textarea } from '@/components/ui';
@@ -44,12 +44,6 @@ export function BotGreetingPage() {
 
   return (
     <div className="flex flex-col gap-3">
-      <header className="flex items-center justify-between">
-        <Link to="/app/bot" className="text-sm text-mute">
-          ← Бот
-        </Link>
-      </header>
-
       <div>
         <h1 className="font-display text-2xl text-ink">Приветствие</h1>
         <p className="text-xs text-mute">

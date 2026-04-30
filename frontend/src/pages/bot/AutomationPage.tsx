@@ -92,11 +92,6 @@ export function BotAutomationPage() {
 
   return (
     <div className="flex flex-col gap-3">
-      <header className="flex items-center justify-between">
-        <Link to="/app/bot" className="text-sm text-mute">
-          ← Бот
-        </Link>
-      </header>
       <div>
         <h1 className="font-display text-2xl text-ink">Автоматизация</h1>
         <p className="text-xs text-mute">Бот сам пишет клиентам в нужный момент.</p>

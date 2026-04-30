@@ -86,6 +86,12 @@ export function BotHubPage() {
         subtitle={servicesLabel}
       />
       <HubCard
+        to="/app/schedule"
+        icon="📅"
+        title="Расписание"
+        subtitle="Часы работы, перерывы, отпуска"
+      />
+      <HubCard
         to="/app/bot/knowledge"
         icon="📚"
         title="База знаний"
