@@ -1,3 +1,12 @@
+from app.schemas.funnel import (
+    FunnelCreate,
+    FunnelRead,
+    FunnelStepCreate,
+    FunnelStepRead,
+    FunnelSummary,
+    FunnelUpdate,
+    SeedPresetRequest,
+)
 from app.schemas.master import MasterRead
 from app.schemas.schedule import (
     ScheduleBreakEntry,
@@ -12,7 +21,14 @@ from app.schemas.service import ServiceCreate, ServiceRead, ServiceUpdate
 from app.schemas.slot import SlotLockRequest, SlotLockResponse, SlotRead, SlotsResponse
 
 __all__ = [
+    "FunnelCreate",
+    "FunnelRead",
+    "FunnelStepCreate",
+    "FunnelStepRead",
+    "FunnelSummary",
+    "FunnelUpdate",
     "MasterRead",
+    "SeedPresetRequest",
     "ScheduleBreakEntry",
     "ScheduleBreakRead",
     "ScheduleBundle",

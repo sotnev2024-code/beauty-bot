@@ -1,9 +1,4 @@
-"""Process a client message: load history, call LLM, persist outgoing reply.
-
-Stage 3 deliberately keeps the funnel piece minimal — there are no funnels yet
-(Stage 5). We feed the LLM the master's profile + last N messages, send the
-reply back via the bot, and store the assistant message.
-"""
+"""Process a client message: pick funnel, run LLM, advance step, persist reply."""
 
 from __future__ import annotations
 
@@ -18,9 +13,16 @@ from app.llm.base import LLMMessage
 from app.llm.prompts import build_step_prompt
 from app.models import (
     Conversation,
+    FunnelStep,
     Master,
     Message,
     MessageDirection,
+    Service,
+)
+from app.services.funnel import (
+    first_step,
+    funnel_step_by_id,
+    select_funnel_for_conversation,
 )
 
 log = logging.getLogger(__name__)
@@ -36,18 +38,21 @@ async def process_client_message(
     user_text: str,
     llm: LLMProvider,
 ) -> Message:
-    """Run the LLM for one inbound message; persist and return the outgoing message row.
+    """Run the funnel + LLM for one inbound message; persist the OUT row.
 
-    The caller is responsible for committing the session and actually sending
-    the reply to the client (the bot handler does both).
+    Caller is responsible for committing the session and sending the reply.
     """
     history = await _load_history(session, conversation.id, limit=settings.LLM_HISTORY_MESSAGES)
+
+    step = await _resolve_active_step(session, master=master, conversation=conversation)
+    services_text = await _services_block(session, master.id)
+
     system_prompt = build_step_prompt(
         master_name=master.name,
         niche=master.niche,
-        step_goal=None,
-        step_system_prompt=None,
-        services_text=None,
+        step_goal=step.goal if step else None,
+        step_system_prompt=step.system_prompt if step else None,
+        services_text=services_text,
     )
 
     try:
@@ -63,7 +68,15 @@ async def process_client_message(
             "collected_data": result.collected_data,
             "slot_intent": result.slot_intent,
             "portfolio_request": result.portfolio_request,
+            "step_id": step.id if step else None,
         }
+
+        # Advance the conversation's funnel step.
+        if step is not None:
+            target = await _next_step(session, current=step, hinted_id=result.next_step_id)
+            if target is not None and target.id != conversation.current_step_id:
+                conversation.current_step_id = target.id
+                conversation.current_funnel_id = target.funnel_id
     except LLMServiceError as e:
         log.exception("LLM failed for conversation_id=%s: %s", conversation.id, e)
         reply_text = FALLBACK_REPLY
@@ -78,6 +91,44 @@ async def process_client_message(
     session.add(out)
     await session.flush()
     return out
+
+
+async def _resolve_active_step(
+    session: AsyncSession, *, master: Master, conversation: Conversation
+) -> FunnelStep | None:
+    if conversation.current_step_id:
+        step = await funnel_step_by_id(session, conversation.current_step_id)
+        if step:
+            return step
+
+    funnel = await select_funnel_for_conversation(
+        session,
+        master_id=master.id,
+        client_id=conversation.client_id,
+        conversation=conversation,
+    )
+    if funnel is None:
+        return None
+
+    step = await first_step(session, funnel.id)
+    if step is not None:
+        conversation.current_funnel_id = funnel.id
+        conversation.current_step_id = step.id
+    return step
+
+
+async def _next_step(
+    session: AsyncSession,
+    *,
+    current: FunnelStep,
+    hinted_id: int | None,
+) -> FunnelStep | None:
+    """LLM may suggest next_step_id; fall back to the next position-wise step."""
+    if hinted_id is not None and hinted_id != current.id:
+        target = await funnel_step_by_id(session, hinted_id)
+        if target is not None and target.funnel_id == current.funnel_id:
+            return target
+    return current  # default: stay
 
 
 async def _load_history(
@@ -99,6 +150,29 @@ async def _load_history(
             history.append(LLMMessage(role="user", content=row.text))
         elif row.direction == MessageDirection.OUT:
             history.append(LLMMessage(role="assistant", content=row.text))
-        # MASTER messages are excluded — they're human takeover, not part of the
-        # bot/client conversation thread the LLM is reasoning about.
     return history
+
+
+async def _services_block(session: AsyncSession, master_id: int) -> str | None:
+    rows = (
+        (
+            await session.execute(
+                select(Service)
+                .where(Service.master_id == master_id, Service.is_active.is_(True))
+                .order_by(Service.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return None
+    lines = [
+        f"- id={s.id}: {s.name}, {s.duration_minutes} мин, {s.price} ₽"
+        + (f" — {s.description}" if s.description else "")
+        for s in rows
+    ]
+    return "\n".join(lines)
+
+
+__all__ = ["process_client_message"]
