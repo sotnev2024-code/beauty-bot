@@ -13,6 +13,7 @@ from app.api.miniapp import (
     schedule,
     services,
     slots,
+    test_dialog,
 )
 
 router = APIRouter()
@@ -28,3 +29,4 @@ router.include_router(analytics.router)
 router.include_router(portfolio.router)
 router.include_router(billing.router)
 router.include_router(insights.router)
+router.include_router(test_dialog.router)

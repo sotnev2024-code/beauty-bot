@@ -155,6 +155,25 @@ export const Analytics = {
     api.get<OverviewData>('/analytics/overview', { params }).then((r) => r.data),
 };
 
+export const TestDialog = {
+  send: (payload: {
+    history: { role: 'user' | 'assistant'; text: string }[];
+    user_message: string;
+    funnel_id?: number;
+    step_position?: number;
+  }) =>
+    api
+      .post<{
+        reply: string;
+        next_step_id: number | null;
+        escalate: boolean;
+        portfolio_request: boolean;
+        slot_intent: Record<string, unknown> | null;
+        collected_data: Record<string, unknown>;
+      }>('/test/dialog', payload)
+      .then((r) => r.data),
+};
+
 export const Billing = {
   plan: () => api.get<import('./types').PlanInfo>('/billing/plan').then((r) => r.data),
   history: () =>

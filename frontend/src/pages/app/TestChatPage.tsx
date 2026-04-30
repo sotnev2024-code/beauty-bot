@@ -1,24 +1,210 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { Card } from '@/components/ui';
+import { Funnels, TestDialog } from '@/api';
+import type { FunnelSummary } from '@/api/types';
+import { Button, Card, Input } from '@/components/ui';
 
-/** Phase 4 will replace this with a real virtual chat against the LLM. */
+interface Msg {
+  role: 'user' | 'assistant';
+  text: string;
+  meta?: {
+    next_step_id: number | null;
+    escalate: boolean;
+    portfolio_request: boolean;
+    slot_intent: unknown;
+    collected_data: unknown;
+  };
+}
+
 export function TestChatPage() {
+  const [funnels, setFunnels] = useState<FunnelSummary[]>([]);
+  const [funnelId, setFunnelId] = useState<number | null>(null);
+  const [history, setHistory] = useState<Msg[]>([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    Funnels.list()
+      .then((rows) => {
+        setFunnels(rows);
+        const active = rows.find((f) => f.is_active);
+        if (active) setFunnelId(active.id);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [history.length, busy]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    setError(null);
+    const next: Msg[] = [...history, { role: 'user', text }];
+    setHistory(next);
+    setInput('');
+    try {
+      const res = await TestDialog.send({
+        history: next.map((m) => ({ role: m.role, text: m.text })),
+        user_message: text,
+        funnel_id: funnelId ?? undefined,
+      });
+      setHistory((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: res.reply,
+          meta: {
+            next_step_id: res.next_step_id,
+            escalate: res.escalate,
+            portfolio_request: res.portfolio_request,
+            slot_intent: res.slot_intent,
+            collected_data: res.collected_data,
+          },
+        },
+      ]);
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data
+        ?.detail;
+      setError(detail ?? 'Ошибка теста');
+      setHistory(history); // rollback
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reset = () => {
+    setHistory([]);
+    setInput('');
+    setError(null);
+  };
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3 h-full">
       <header className="flex items-center justify-between">
-        <h1 className="font-display text-2xl text-ink">Тестовый чат</h1>
         <Link to="/app" className="text-sm text-mute">
           ← Назад
         </Link>
+        <Button size="md" variant="ghost" onClick={reset}>
+          Сбросить
+        </Button>
       </header>
-      <Card>
-        <p className="text-sm text-ink-soft">
-          Скоро здесь можно будет писать боту от имени клиента и видеть его
-          ответы — без записи в реальную БД и без отправки в Telegram. Это
-          поможет настроить промты воронок до того, как клиент напишет вживую.
+
+      <div>
+        <h1 className="font-display text-2xl text-ink">Тестовый чат</h1>
+        <p className="text-xs text-mute">
+          Пиши как будто ты клиент. Бот ответит по выбранной воронке. Без записи в
+          реальную БД и без отправки в Telegram.
         </p>
+      </div>
+
+      <Card>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs uppercase tracking-wider text-mute font-semibold">
+            Воронка
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {funnels.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFunnelId(f.id)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                  funnelId === f.id
+                    ? 'border-accent bg-accent-soft text-accent-dark'
+                    : 'border-divider bg-card text-mute'
+                }`}
+              >
+                {f.name}
+              </button>
+            ))}
+            {funnels.length === 0 && (
+              <span className="text-xs text-mute">
+                Нет воронок — добавь хотя бы одну во вкладке «Бот».
+              </span>
+            )}
+          </div>
+        </div>
       </Card>
+
+      <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto pr-1">
+        {history.length === 0 ? (
+          <Card>
+            <p className="text-sm text-mute">
+              Начни диалог — например, «Здравствуйте, можно записаться?»
+            </p>
+          </Card>
+        ) : (
+          history.map((m, i) => <Bubble key={i} msg={m} />)
+        )}
+        {busy && <Bubble msg={{ role: 'assistant', text: '…' }} />}
+        <div ref={endRef} />
+      </div>
+
+      {error && (
+        <Card>
+          <p className="text-xs text-danger">{error}</p>
+        </Card>
+      )}
+
+      <div className="sticky bottom-0 -mx-4 px-4 py-3 bg-bg/80 backdrop-blur border-t border-divider flex gap-2">
+        <div className="flex-1">
+          <Input
+            placeholder="Напиши сообщение от клиента"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+          />
+        </div>
+        <Button onClick={send} disabled={!input.trim() || busy}>
+          ↗
+        </Button>
+      </div>
     </div>
   );
+}
+
+function Bubble({ msg }: { msg: Msg }) {
+  const isUser = msg.role === 'user';
+  const cls = isUser
+    ? 'self-end bg-ink text-white rounded-2xl rounded-br-md'
+    : 'self-start bg-card text-ink border border-divider rounded-2xl rounded-bl-md';
+  const label = isUser ? 'клиент' : 'бот';
+  return (
+    <div className={`max-w-[85%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+      <span className="text-[10px] uppercase tracking-wider text-mute mb-0.5">
+        {label}
+      </span>
+      <div className={`px-3.5 py-2 text-[14px] leading-snug ${cls}`}>{msg.text}</div>
+      {msg.meta && hasFlags(msg.meta) && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {msg.meta.escalate && <Pill>escalate</Pill>}
+          {msg.meta.portfolio_request && <Pill>portfolio</Pill>}
+          {Boolean(msg.meta.slot_intent) && <Pill>slot_intent</Pill>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-accent-soft text-accent-dark">
+      {children}
+    </span>
+  );
+}
+
+function hasFlags(meta: NonNullable<Msg['meta']>): boolean {
+  return Boolean(meta.escalate || meta.portfolio_request || meta.slot_intent);
 }
