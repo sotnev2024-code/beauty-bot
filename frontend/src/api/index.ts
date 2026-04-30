@@ -2,7 +2,7 @@ import axios, { type AxiosInstance } from 'axios';
 
 import type {
   BookingDetail,
-  BotSettings,
+  BotSettings as BotSettingsType,
   BotSettingsUpdate,
   ClientDetail,
   ClientListItem,
@@ -181,11 +181,11 @@ export const TestDialog = {
 };
 
 export const BotSettings = {
-  get: () => api.get<BotSettings>('/bot/settings').then((r) => r.data),
+  get: () => api.get<BotSettingsType>('/bot/settings').then((r) => r.data),
   update: (payload: BotSettingsUpdate) =>
-    api.patch<BotSettings>('/bot/settings', payload).then((r) => r.data),
-  enable: () => api.post<BotSettings>('/bot/enable').then((r) => r.data),
-  disable: () => api.post<BotSettings>('/bot/disable').then((r) => r.data),
+    api.patch<BotSettingsType>('/bot/settings', payload).then((r) => r.data),
+  enable: () => api.post<BotSettingsType>('/bot/enable').then((r) => r.data),
+  disable: () => api.post<BotSettingsType>('/bot/disable').then((r) => r.data),
 };
 
 export const Categories = {
@@ -222,9 +222,9 @@ export const ReturnSettingsApi = {
 };
 
 export const BotReminders = {
-  enable: () => api.post<BotSettings>('/bot/reminders/enable').then((r) => r.data),
+  enable: () => api.post<BotSettingsType>('/bot/reminders/enable').then((r) => r.data),
   disable: () =>
-    api.post<BotSettings>('/bot/reminders/disable').then((r) => r.data),
+    api.post<BotSettingsType>('/bot/reminders/disable').then((r) => r.data),
 };
 
 export const ReturnCampaigns = {

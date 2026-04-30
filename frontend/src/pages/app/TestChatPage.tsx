@@ -9,10 +9,8 @@ interface Msg {
   role: 'user' | 'assistant';
   text: string;
   meta?: {
-    next_step_id: number | null;
+    actions: { type: string }[];
     escalate: boolean;
-    portfolio_request: boolean;
-    slot_intent: unknown;
     collected_data: unknown;
   };
 }
@@ -60,10 +58,8 @@ export function TestChatPage() {
           role: 'assistant',
           text: res.reply,
           meta: {
-            next_step_id: res.next_step_id,
+            actions: res.actions,
             escalate: res.escalate,
-            portfolio_request: res.portfolio_request,
-            slot_intent: res.slot_intent,
             collected_data: res.collected_data,
           },
         },
@@ -189,8 +185,9 @@ function Bubble({ msg }: { msg: Msg }) {
       {msg.meta && hasFlags(msg.meta) && (
         <div className="flex flex-wrap gap-1 mt-1">
           {msg.meta.escalate && <Pill>escalate</Pill>}
-          {msg.meta.portfolio_request && <Pill>portfolio</Pill>}
-          {Boolean(msg.meta.slot_intent) && <Pill>slot_intent</Pill>}
+          {msg.meta.actions.map((a, i) => (
+            <Pill key={i}>{a.type}</Pill>
+          ))}
         </div>
       )}
     </div>
@@ -206,5 +203,5 @@ function Pill({ children }: { children: React.ReactNode }) {
 }
 
 function hasFlags(meta: NonNullable<Msg['meta']>): boolean {
-  return Boolean(meta.escalate || meta.portfolio_request || meta.slot_intent);
+  return Boolean(meta.escalate || meta.actions.length);
 }
