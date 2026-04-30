@@ -13,6 +13,11 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from app.workers.scheduler import shutdown_scheduler, start_scheduler
+
+    if settings.ENVIRONMENT != "test":
+        start_scheduler()
+
     webhook_ready = (
         settings.ENVIRONMENT != "test"
         and settings.TELEGRAM_BOT_TOKEN
@@ -47,6 +52,8 @@ async def lifespan(_app: FastAPI):
         except Exception:
             log.exception("failed to set webhook on startup")
     yield
+    if settings.ENVIRONMENT != "test":
+        shutdown_scheduler()
     # Don't deleteWebhook on shutdown — production replicas restart frequently
     # and we don't want updates to fall on the floor.
 

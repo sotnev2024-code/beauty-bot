@@ -1,3 +1,4 @@
+from app.schemas.booking import BookingCreate, BookingRead
 from app.schemas.funnel import (
     FunnelCreate,
     FunnelRead,
@@ -21,6 +22,8 @@ from app.schemas.service import ServiceCreate, ServiceRead, ServiceUpdate
 from app.schemas.slot import SlotLockRequest, SlotLockResponse, SlotRead, SlotsResponse
 
 __all__ = [
+    "BookingCreate",
+    "BookingRead",
     "FunnelCreate",
     "FunnelRead",
     "FunnelStepCreate",

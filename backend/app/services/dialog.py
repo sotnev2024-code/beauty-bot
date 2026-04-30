@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,8 @@ from app.llm import LLMProvider, LLMServiceError
 from app.llm.base import LLMMessage
 from app.llm.prompts import build_step_prompt
 from app.models import (
+    Booking,
+    Client,
     Conversation,
     FunnelStep,
     Master,
@@ -19,6 +22,7 @@ from app.models import (
     MessageDirection,
     Service,
 )
+from app.services.booking_create import BookingError, create_booking
 from app.services.funnel import (
     first_step,
     funnel_step_by_id,
@@ -77,6 +81,20 @@ async def process_client_message(
             if target is not None and target.id != conversation.current_step_id:
                 conversation.current_step_id = target.id
                 conversation.current_funnel_id = target.funnel_id
+
+        # If the model confirmed a slot — try to create a booking.
+        if result.slot_intent:
+            booking = await _try_create_from_slot_intent(
+                session,
+                master=master,
+                conversation=conversation,
+                slot_intent=result.slot_intent,
+                collected=result.collected_data,
+            )
+            if booking is not None:
+                meta["booking_id"] = booking.id
+            else:
+                meta["booking_skipped"] = True
     except LLMServiceError as e:
         log.exception("LLM failed for conversation_id=%s: %s", conversation.id, e)
         reply_text = FALLBACK_REPLY
@@ -151,6 +169,64 @@ async def _load_history(
         elif row.direction == MessageDirection.OUT:
             history.append(LLMMessage(role="assistant", content=row.text))
     return history
+
+
+async def _try_create_from_slot_intent(
+    session: AsyncSession,
+    *,
+    master: Master,
+    conversation: Conversation,
+    slot_intent: dict,
+    collected: dict,
+) -> Booking | None:
+    starts_at_raw = slot_intent.get("starts_at")
+    service_id = slot_intent.get("service_id")
+    if not starts_at_raw:
+        return None
+    try:
+        starts_at = datetime.fromisoformat(str(starts_at_raw))
+    except ValueError:
+        log.warning("slot_intent: invalid starts_at=%r", starts_at_raw)
+        return None
+
+    svc: Service | None = None
+    if service_id is not None:
+        svc = await session.get(Service, int(service_id))
+        if svc is None or svc.master_id != master.id or not svc.is_active:
+            svc = None
+    if svc is None:
+        # Fall back to the first active service.
+        svc = (
+            await session.execute(
+                select(Service)
+                .where(Service.master_id == master.id, Service.is_active.is_(True))
+                .order_by(Service.id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    if svc is None:
+        return None
+
+    client = await session.get(Client, conversation.client_id)
+    if client is None:
+        return None
+    if not client.name and isinstance(collected.get("name"), str):
+        client.name = collected["name"]
+    if not client.phone and isinstance(collected.get("phone"), str):
+        client.phone = collected["phone"]
+
+    try:
+        return await create_booking(
+            session,
+            master=master,
+            client=client,
+            service=svc,
+            starts_at=starts_at,
+            source="bot",
+        )
+    except BookingError as e:
+        log.warning("slot_intent rejected: %s", e)
+        return None
 
 
 async def _services_block(session: AsyncSession, master_id: int) -> str | None:
