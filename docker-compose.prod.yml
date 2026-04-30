@@ -1,12 +1,74 @@
-# Production overrides — будет дополнено на Этапе 12 (deploy на Timeweb Cloud).
-# Использование: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-services:
-  backend:
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers
-    restart: always
-    volumes: []
+# Production stack. On the server:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Differences vs dev compose.yml:
+# - backend image is built without dev deps (INSTALL_DEV=false)
+# - no source bind-mount, no --reload
+# - frontend container is replaced with `web` (nginx) that serves the static
+#   bundle, reverse-proxies /api → backend, and serves /portfolio/ from disk
+# - HTTPS via Let's Encrypt certs from /etc/letsencrypt on the host
 
-  frontend:
-    command: pnpm preview --host 0.0.0.0
+services:
+  db:
+    image: postgres:15-alpine
     restart: always
-    volumes: []
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "false"
+    restart: always
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+    volumes:
+      - portfolio:/var/www/portfolio
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"
+
+  web:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - portfolio:/var/www/portfolio:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - certbot-webroot:/var/www/certbot
+
+volumes:
+  pgdata:
+  portfolio:
+  certbot-webroot:
