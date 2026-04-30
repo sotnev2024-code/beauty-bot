@@ -22,8 +22,10 @@ from aiogram.types import BusinessConnection, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import get_bot
 from app.core.config import settings
 from app.core.db import session_factory
+from app.llm import get_llm
 from app.models import (
     BusinessConnection as BusinessConnectionModel,
 )
@@ -39,6 +41,7 @@ from app.models import (
 from app.models import (
     MessageDirection as MessageDirectionEnum,
 )
+from app.services import process_client_message
 
 router = Router(name="business")
 log = logging.getLogger(__name__)
@@ -125,14 +128,38 @@ async def on_business_message(message: Message) -> None:
         else:
             direction = MessageDirectionEnum.IN
 
+        text = message.text or message.caption
         session.add(
             MessageModel(
                 conversation_id=conversation.id,
                 direction=direction,
-                text=message.text or message.caption,
+                text=text,
             )
         )
-        await session.commit()
+        await session.flush()
+
+        # Bot replies only to the client and only when not in human-takeover.
+        should_reply = not is_master_outgoing and text and _bot_active(conversation, now)
+        if should_reply:
+            master = await _load_master(session, master_id)
+            out_msg = await process_client_message(
+                session,
+                master=master,
+                conversation=conversation,
+                user_text=text,
+                llm=get_llm(),
+            )
+            await session.commit()
+            try:
+                await get_bot().send_message(
+                    chat_id=message.chat.id,
+                    text=out_msg.text or "",
+                    business_connection_id=message.business_connection_id,
+                )
+            except Exception:
+                log.exception("business_message: failed to deliver bot reply")
+        else:
+            await session.commit()
 
     log.info(
         "business_message: master_id=%s client_tg=%s dir=%s takeover_until=%s",
@@ -141,6 +168,24 @@ async def on_business_message(message: Message) -> None:
         direction,
         conversation.takeover_until,
     )
+
+
+def _bot_active(conversation: Conversation, now: datetime) -> bool:
+    if conversation.state != ConversationState.HUMAN_TAKEOVER:
+        return True
+    if conversation.takeover_until is None:
+        return True
+    if conversation.takeover_until <= now:
+        # Window expired — flip back to bot.
+        conversation.state = ConversationState.BOT
+        conversation.takeover_until = None
+        return True
+    return False
+
+
+async def _load_master(session: AsyncSession, master_id: int) -> Master:
+    result = await session.execute(select(Master).where(Master.id == master_id))
+    return result.scalar_one()
 
 
 # --- helpers ---------------------------------------------------------------
