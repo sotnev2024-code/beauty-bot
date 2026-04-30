@@ -106,6 +106,7 @@ class DeepSeekProvider(LLMProvider):
             "messages": messages,
             "response_format": {"type": "json_object"},
             "temperature": 0.4,
+            "max_tokens": 1024,
         }
         headers = {
             "Authorization": f"Bearer {self._cfg.api_key}",
@@ -152,9 +153,20 @@ class DeepSeekProvider(LLMProvider):
             if cleaned.lower().startswith("json"):
                 cleaned = cleaned[4:].lstrip("\n")
 
+        if not cleaned:
+            usage = response.get("usage") or {}
+            finish = choice.get("finish_reason")
+            log.warning(
+                "LLM returned empty content (finish_reason=%s, usage=%s)", finish, usage
+            )
+            raise LLMServiceError(
+                f"empty content (finish_reason={finish}, usage={usage})"
+            )
+
         try:
             args = json.loads(cleaned)
         except json.JSONDecodeError as e:
+            log.warning("LLM JSON parse failed; raw content (first 500 chars): %r", content[:500])
             raise LLMServiceError(f"content is not valid JSON: {e}") from e
 
         if not isinstance(args, dict):
