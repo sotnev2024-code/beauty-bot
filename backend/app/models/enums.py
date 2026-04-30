@@ -7,12 +7,6 @@ class Plan(StrEnum):
     PRO_PLUS = "pro_plus"
 
 
-class FunnelType(StrEnum):
-    MAIN = "main"
-    RETURN = "return"
-    COLD = "cold"
-
-
 class ConversationState(StrEnum):
     BOT = "bot"
     HUMAN_TAKEOVER = "human_takeover"

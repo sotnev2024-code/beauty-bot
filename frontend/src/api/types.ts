@@ -1,7 +1,6 @@
 // API DTOs — kept hand-written and synced with backend Pydantic schemas.
 
 export type Plan = 'trial' | 'pro' | 'pro_plus';
-export type FunnelType = 'main' | 'return' | 'cold';
 export type ConversationState = 'bot' | 'human_takeover';
 export type MessageDirection = 'in' | 'out' | 'master';
 export type BookingStatus = 'scheduled' | 'done' | 'cancelled' | 'no_show';
@@ -17,9 +16,6 @@ export interface Master {
   trial_ends_at: string | null;
   subscription_active_until: string | null;
   bot_enabled: boolean;
-  voice: string | null;
-  greeting: string | null;
-  rules: string | null;
   address: string | null;
   created_at: string;
 }
@@ -28,9 +24,6 @@ export interface MasterUpdate {
   name?: string;
   niche?: string;
   timezone?: string;
-  voice?: string;
-  greeting?: string;
-  rules?: string;
   address?: string;
   bot_enabled?: boolean;
 }
@@ -174,21 +167,6 @@ export interface ScheduleEntry {
   is_working: boolean;
 }
 
-export interface FunnelPresetSummary {
-  key: string;
-  name: string;
-  type: FunnelType;
-  steps_count: number;
-}
-
-export interface FunnelSummary {
-  id: number;
-  name: string;
-  type: FunnelType;
-  is_active: boolean;
-  preset_key: string | null;
-}
-
 export interface DashboardData {
   today_bookings: number;
   today_revenue: string;
@@ -268,24 +246,6 @@ export interface ClientDetail {
   phone: string | null;
   notes: string | null;
   stats: ClientStats;
-}
-
-export interface FunnelStep {
-  id: number;
-  position: number;
-  system_prompt: string;
-  goal: string | null;
-  transition_conditions: Record<string, unknown> | null;
-  collected_fields: string[] | null;
-}
-
-export interface FunnelDetail {
-  id: number;
-  name: string;
-  type: FunnelType;
-  is_active: boolean;
-  preset_key: string | null;
-  steps: FunnelStep[];
 }
 
 export interface ScheduleBreak {

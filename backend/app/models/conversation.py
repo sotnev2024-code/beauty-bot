@@ -20,12 +20,6 @@ class Conversation(IdMixin, TimestampMixin, Base):
     client_id: Mapped[int] = mapped_column(
         ForeignKey("clients.id", ondelete="CASCADE"), index=True, nullable=False
     )
-    current_funnel_id: Mapped[int | None] = mapped_column(
-        ForeignKey("funnels.id", ondelete="SET NULL"), nullable=True
-    )
-    current_step_id: Mapped[int | None] = mapped_column(
-        ForeignKey("funnel_steps.id", ondelete="SET NULL"), nullable=True
-    )
     state: Mapped[ConversationState] = mapped_column(
         String(16), default=ConversationState.BOT, nullable=False
     )

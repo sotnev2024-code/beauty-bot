@@ -9,14 +9,6 @@ from app.services.booking import (
 )
 from app.services.booking_create import BookingError, create_booking
 from app.services.dialog import process_client_message
-from app.services.funnel import (
-    activate_funnel,
-    first_step,
-    funnel_step_by_id,
-    seed_funnel_from_preset,
-    select_funnel_for_conversation,
-    step_after,
-)
 from app.services.notify import push_master_about_booking
 from app.services.reminders import deliver_due_reminders, schedule_booking_reminders
 
@@ -25,19 +17,13 @@ __all__ = [
     "Slot",
     "SlotSearchResult",
     "acquire_slot_lock",
-    "activate_funnel",
     "create_booking",
     "deliver_due_reminders",
     "filter_locked_slots",
     "find_available_slots",
-    "first_step",
-    "funnel_step_by_id",
     "process_client_message",
     "push_master_about_booking",
     "release_slot_lock",
     "schedule_booking_reminders",
-    "seed_funnel_from_preset",
-    "select_funnel_for_conversation",
     "slot_lock_ttl",
-    "step_after",
 ]

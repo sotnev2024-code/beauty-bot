@@ -9,9 +9,6 @@ import type {
   ConversationDetail,
   ConversationSummary,
   DashboardData,
-  FunnelDetail,
-  FunnelPresetSummary,
-  FunnelSummary,
   KnowledgeItem,
   KnowledgeItemCreate,
   Master,
@@ -86,19 +83,6 @@ export const Schedule = {
     api.post<TimeOff>('/schedule/time-offs', payload).then((r) => r.data),
   removeTimeOff: (id: number) =>
     api.delete(`/schedule/time-offs/${id}`).then(() => undefined),
-};
-
-export const Funnels = {
-  presets: () => api.get<FunnelPresetSummary[]>('/funnels/presets').then((r) => r.data),
-  list: () => api.get<FunnelSummary[]>('/funnels').then((r) => r.data),
-  get: (id: number) => api.get<FunnelDetail>(`/funnels/${id}`).then((r) => r.data),
-  seed: (preset_key: string, activate = true) =>
-    api
-      .post<FunnelDetail>('/funnels/seed-preset', { preset_key, activate })
-      .then((r) => r.data),
-  update: (id: number, payload: Partial<FunnelDetail>) =>
-    api.patch<FunnelDetail>(`/funnels/${id}`, payload).then((r) => r.data),
-  remove: (id: number) => api.delete(`/funnels/${id}`).then(() => undefined),
 };
 
 export const BusinessConnections = {

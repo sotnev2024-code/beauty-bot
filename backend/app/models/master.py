@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, IdMixin, TimestampMixin
@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from app.models.booking import Booking
     from app.models.business_connection import BusinessConnection
     from app.models.client import Client
-    from app.models.funnel import Funnel
     from app.models.service import Service
 
 
@@ -32,18 +31,12 @@ class Master(IdMixin, TimestampMixin, Base):
 
     # Profile / settings
     bot_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    voice: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    greeting: Mapped[str | None] = mapped_column(Text, nullable=True)
-    rules: Mapped[str | None] = mapped_column(Text, nullable=True)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     business_connections: Mapped[list["BusinessConnection"]] = relationship(
         back_populates="master", cascade="all, delete-orphan"
     )
     services: Mapped[list["Service"]] = relationship(
-        back_populates="master", cascade="all, delete-orphan"
-    )
-    funnels: Mapped[list["Funnel"]] = relationship(
         back_populates="master", cascade="all, delete-orphan"
     )
     clients: Mapped[list["Client"]] = relationship(

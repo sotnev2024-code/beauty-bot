@@ -18,9 +18,6 @@ class MasterRead(BaseModel):
     trial_ends_at: datetime | None
     subscription_active_until: datetime | None
     bot_enabled: bool
-    voice: str | None
-    greeting: str | None
-    rules: str | None
     address: str | None
     created_at: datetime
 
@@ -29,9 +26,6 @@ class MasterUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     niche: str | None = Field(default=None, max_length=64)
     timezone: str | None = Field(default=None, max_length=64)
-    voice: str | None = Field(default=None, max_length=32)
-    greeting: str | None = None
-    rules: str | None = None
     address: str | None = Field(default=None, max_length=255)
     bot_enabled: bool | None = None
 
@@ -44,9 +38,8 @@ class OnboardingStatus(BaseModel):
     schedule_done: bool
     services_done: bool
     voice_done: bool
-    # Legacy gate — always True post-Step 1 since we no longer gate on funnels.
-    # Kept in the schema so the deployed frontend's STEP_ROUTES still parses;
-    # removed in Step 10.
-    funnel_done: bool
+    # Legacy gate — always True. Removed in a follow-up release once the
+    # deployed frontend stops referencing it.
+    funnel_done: bool = True
     business_connected: bool
     complete: bool

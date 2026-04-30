@@ -7,14 +7,12 @@ from app.models.conversation import Conversation, Message
 from app.models.enums import (
     BookingStatus,
     ConversationState,
-    FunnelType,
     MessageDirection,
     PaymentStatus,
     Plan,
     ReminderType,
     Segment,
 )
-from app.models.funnel import Funnel, FunnelStep
 from app.models.insight import Insight
 from app.models.knowledge_base import KnowledgeBaseItem
 from app.models.master import Master
@@ -39,9 +37,6 @@ __all__ = [
     "ClientTag",
     "Conversation",
     "ConversationState",
-    "Funnel",
-    "FunnelStep",
-    "FunnelType",
     "Insight",
     "KnowledgeBaseItem",
     "Master",

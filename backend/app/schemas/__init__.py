@@ -1,14 +1,5 @@
 from app.schemas.booking import BookingCreate, BookingDetail, BookingRead, BookingUpdate
 from app.schemas.bot_settings import BotSettingsRead, BotSettingsUpdate
-from app.schemas.funnel import (
-    FunnelCreate,
-    FunnelRead,
-    FunnelStepCreate,
-    FunnelStepRead,
-    FunnelSummary,
-    FunnelUpdate,
-    SeedPresetRequest,
-)
 from app.schemas.knowledge_base import KnowledgeItemCreate, KnowledgeItemRead, KnowledgeItemUpdate
 from app.schemas.master import MasterRead, MasterUpdate
 from app.schemas.return_campaign import ReturnCampaignRead
@@ -39,12 +30,6 @@ __all__ = [
     "BotSettingsRead",
     "BotSettingsUpdate",
     "CategoryReorderRequest",
-    "FunnelCreate",
-    "FunnelRead",
-    "FunnelStepCreate",
-    "FunnelStepRead",
-    "FunnelSummary",
-    "FunnelUpdate",
     "KnowledgeItemCreate",
     "KnowledgeItemRead",
     "KnowledgeItemUpdate",
@@ -53,7 +38,6 @@ __all__ = [
     "ReturnCampaignRead",
     "ReturnSettingsRead",
     "ReturnSettingsUpdate",
-    "SeedPresetRequest",
     "ScheduleBreakEntry",
     "ScheduleBreakRead",
     "ScheduleBundle",

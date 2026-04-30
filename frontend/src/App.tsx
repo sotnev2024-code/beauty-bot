@@ -13,14 +13,10 @@ import {
   ChatList,
   ClientsPage,
   Dashboard,
-  FunnelEditor,
-  FunnelsPage,
   Paywall,
   PricingPage,
   SchedulePage,
-  ServicesPage,
   SettingsPage,
-  TestChatPage,
 } from '@/pages/app';
 import {
   BotAutomationPage,
@@ -38,7 +34,6 @@ import {
   Address,
   Connect,
   Done,
-  FunnelStep,
   Premium,
   Profile,
   Schedule,
@@ -83,7 +78,6 @@ const STEP_ROUTES: { key: keyof OnboardingStatus; route: string }[] = [
   { key: 'address_done', route: '/onboarding/address' },
   { key: 'schedule_done', route: '/onboarding/schedule' },
   { key: 'services_done', route: '/onboarding/services' },
-  { key: 'funnel_done', route: '/onboarding/funnel' },
 ];
 
 function NeedsOnboarding() {
@@ -134,25 +128,25 @@ export default function App() {
             <Route path="/onboarding/address" element={<Address />} />
             <Route path="/onboarding/schedule" element={<Schedule />} />
             <Route path="/onboarding/services" element={<Services />} />
-            <Route path="/onboarding/funnel" element={<FunnelStep />} />
             <Route path="/onboarding/connect" element={<Connect />} />
             <Route path="/onboarding/done" element={<Done />} />
+            {/* Legacy redirects — bookmarks from the funnel era. */}
+            <Route
+              path="/onboarding/funnel"
+              element={<Navigate to="/onboarding/done" replace />}
+            />
 
             <Route element={<NeedsOnboarding />}>
               <Route element={<AppLayout />}>
                 <Route path="/app" element={<DashboardOrPaywall />} />
                 <Route path="/app/calendar" element={<Calendar />} />
-                <Route path="/app/funnels" element={<FunnelsPage />} />
-                <Route path="/app/funnels/:id" element={<FunnelEditor />} />
                 <Route path="/app/clients" element={<ClientsPage />} />
                 <Route path="/app/chats" element={<ChatList />} />
                 <Route path="/app/chats/:id" element={<ChatDetail />} />
                 <Route path="/app/settings" element={<SettingsPage />} />
-                <Route path="/app/services" element={<ServicesPage />} />
                 <Route path="/app/schedule" element={<SchedulePage />} />
                 <Route path="/app/analytics" element={<AnalyticsPage />} />
                 <Route path="/app/pricing" element={<PricingPage />} />
-                <Route path="/app/test-chat" element={<TestChatPage />} />
 
                 <Route path="/app/bot" element={<BotHubPage />} />
                 <Route path="/app/bot/greeting" element={<BotGreetingPage />} />
@@ -164,6 +158,24 @@ export default function App() {
                 <Route path="/app/bot/timezone" element={<BotTimezonePage />} />
                 <Route path="/app/bot/test" element={<BotTestPage />} />
                 <Route path="/app/bot/disable" element={<BotDisablePage />} />
+
+                {/* Legacy redirects — old routes that have moved into /app/bot. */}
+                <Route
+                  path="/app/funnels"
+                  element={<Navigate to="/app/bot" replace />}
+                />
+                <Route
+                  path="/app/funnels/:id"
+                  element={<Navigate to="/app/bot" replace />}
+                />
+                <Route
+                  path="/app/services"
+                  element={<Navigate to="/app/bot/services" replace />}
+                />
+                <Route
+                  path="/app/test-chat"
+                  element={<Navigate to="/app/bot/test" replace />}
+                />
               </Route>
             </Route>
 

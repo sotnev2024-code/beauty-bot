@@ -3,7 +3,7 @@
 Walks through every major touch point in one test:
 
   1. Master signup via /api/me (initData) → trial issued
-  2. Master onboarding: PATCH /me, services + schedule + funnel preset
+  2. Master onboarding: PATCH /me, services + schedule
   3. Telegram Business connection (webhook event)
   4. Client message → bot replies via the (stubbed) LLM
   5. LLM returns slot_intent → booking + reminders auto-created
@@ -202,12 +202,6 @@ async def test_full_journey(client: AsyncClient, test_session: AsyncSession) -> 
         headers=headers,
     )
     assert sched.status_code == 200
-    funnel = await client.post(
-        "/api/funnels/seed-preset",
-        json={"preset_key": "manicure", "activate": True},
-        headers=headers,
-    )
-    assert funnel.status_code == 201
 
     # ------------------------------------------------------------ 3. business connect
     starts_at = datetime.now(UTC) + timedelta(days=2, hours=12)

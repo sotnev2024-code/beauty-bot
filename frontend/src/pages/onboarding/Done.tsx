@@ -23,7 +23,7 @@ export function Done() {
       subtitle="Можешь открыть приложение или сразу попробовать как бот ответит — у нас есть тестовый чат."
       footer={
         <>
-          <Button size="lg" full onClick={() => nav('/app/test-chat')}>
+          <Button size="lg" full onClick={() => nav('/app/bot/test')}>
             Попробовать тестовый чат
           </Button>
           <Button size="lg" variant="secondary" full onClick={() => nav('/app')}>
@@ -38,7 +38,6 @@ export function Done() {
           <Item ok={status?.address_done}>Адрес</Item>
           <Item ok={status?.schedule_done}>График</Item>
           <Item ok={status?.services_done}>Услуги</Item>
-          <Item ok={status?.funnel_done}>Воронка</Item>
           <Item ok={status?.business_connected}>Telegram Business</Item>
         </ul>
       </Card>
