@@ -85,9 +85,21 @@ class DeepSeekConfig:
 
 
 class DeepSeekProvider(LLMProvider):
-    def __init__(self, config: DeepSeekConfig, *, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        config: DeepSeekConfig,
+        *,
+        client: httpx.AsyncClient | None = None,
+        proxy: str | None = None,
+    ) -> None:
         self._cfg = config
-        self._client = client or httpx.AsyncClient(timeout=config.request_timeout)
+        if client is not None:
+            self._client = client
+        else:
+            kwargs: dict = {"timeout": config.request_timeout}
+            if proxy:
+                kwargs["proxy"] = proxy
+            self._client = httpx.AsyncClient(**kwargs)
         self._owns_client = client is None
 
     async def aclose(self) -> None:

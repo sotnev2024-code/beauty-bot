@@ -19,7 +19,8 @@ def get_llm() -> LLMProvider:
                 api_key=settings.DEEPSEEK_API_KEY,
                 api_base=settings.DEEPSEEK_API_BASE,
                 model=settings.DEEPSEEK_MODEL,
-            )
+            ),
+            proxy=settings.HTTP_PROXY_URL or None,
         )
     return _provider
 

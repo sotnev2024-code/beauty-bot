@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 
 from app.core.config import settings
@@ -21,10 +22,14 @@ def get_bot() -> Bot:
     if _bot is None:
         if not settings.TELEGRAM_BOT_TOKEN:
             raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured")
-        _bot = Bot(
-            token=settings.TELEGRAM_BOT_TOKEN,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        )
+        session = AiohttpSession(proxy=settings.HTTP_PROXY_URL) if settings.HTTP_PROXY_URL else None
+        kwargs: dict = {
+            "token": settings.TELEGRAM_BOT_TOKEN,
+            "default": DefaultBotProperties(parse_mode=ParseMode.HTML),
+        }
+        if session is not None:
+            kwargs["session"] = session
+        _bot = Bot(**kwargs)
     return _bot
 
 

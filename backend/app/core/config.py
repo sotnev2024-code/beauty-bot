@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     MAX_SERVICES_PER_MASTER: int = 20
     LLM_HISTORY_MESSAGES: int = 20
 
+    # Outbound HTTP proxy for Telegram Bot API / DeepSeek / YooKassa.
+    # Use when the host is in a region with restricted outbound access.
+    # Format: http://user:pass@host:port (or http://host:port for unauthenticated).
+    # Empty string disables proxying.
+    HTTP_PROXY_URL: str = ""
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]

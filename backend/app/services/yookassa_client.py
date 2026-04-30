@@ -42,6 +42,13 @@ def _is_configured() -> bool:
     return bool(settings.YOOKASSA_SHOP_ID and settings.YOOKASSA_SECRET_KEY)
 
 
+def _client_kwargs(*, timeout: float, auth) -> dict:
+    kwargs: dict = {"timeout": timeout, "auth": auth}
+    if settings.HTTP_PROXY_URL:
+        kwargs["proxy"] = settings.HTTP_PROXY_URL
+    return kwargs
+
+
 async def create_payment(
     *,
     amount_rub: Decimal,
@@ -69,7 +76,7 @@ async def create_payment(
     auth = (settings.YOOKASSA_SHOP_ID, settings.YOOKASSA_SECRET_KEY)
 
     own = client is None
-    cli = client or httpx.AsyncClient(timeout=20.0, auth=auth)
+    cli = client or httpx.AsyncClient(**_client_kwargs(timeout=20.0, auth=auth))
     try:
         resp = await cli.post(f"{API_BASE}/payments", json=payload, headers=headers)
         if resp.status_code >= 400:
@@ -92,7 +99,10 @@ async def fetch_payment(payment_id: str, client: httpx.AsyncClient | None = None
         raise YooKassaError("YooKassa is not configured")
     own = client is None
     cli = client or httpx.AsyncClient(
-        timeout=15.0, auth=(settings.YOOKASSA_SHOP_ID, settings.YOOKASSA_SECRET_KEY)
+        **_client_kwargs(
+            timeout=15.0,
+            auth=(settings.YOOKASSA_SHOP_ID, settings.YOOKASSA_SECRET_KEY),
+        )
     )
     try:
         resp = await cli.get(f"{API_BASE}/payments/{payment_id}")
