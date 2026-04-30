@@ -71,7 +71,9 @@ async def update_item(
     return KnowledgeItemRead.model_validate(item)
 
 
-@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{item_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
 async def delete_item(
     item_id: int, master: CurrentMaster, session: SessionDep
 ) -> None:

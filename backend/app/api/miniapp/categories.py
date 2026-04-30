@@ -67,7 +67,9 @@ async def update_category(
     return ServiceCategoryRead.model_validate(cat)
 
 
-@router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{category_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
 async def delete_category(
     category_id: int, master: CurrentMaster, session: SessionDep
 ) -> None:
