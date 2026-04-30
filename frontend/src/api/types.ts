@@ -215,6 +215,7 @@ export interface MessageRow {
   direction: MessageDirection;
   text: string | null;
   llm_meta: Record<string, unknown> | null;
+  is_proactive: boolean;
   created_at: string;
 }
 
@@ -260,6 +261,13 @@ export interface TimeOff {
   reason: string | null;
 }
 
+export interface ReturnCampaignsBlock {
+  sent: number;
+  booked: number;
+  expired: number;
+  revenue: string;
+}
+
 export interface OverviewData {
   period_from: string;
   period_to: string;
@@ -269,6 +277,7 @@ export interface OverviewData {
   revenue: string;
   new_clients: number;
   active_conversations: number;
+  return_campaigns: ReturnCampaignsBlock;
 }
 
 export interface SlotItem {

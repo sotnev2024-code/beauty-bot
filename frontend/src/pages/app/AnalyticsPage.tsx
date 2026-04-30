@@ -49,6 +49,28 @@ export function AnalyticsPage() {
         </div>
       )}
 
+      {overview && overview.return_campaigns.sent > 0 && (
+        <Card>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-ink">💌 Возврат клиенток</span>
+              <span className="text-xs text-mute">за период</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <ReturnStat label="отправлено" value={overview.return_campaigns.sent} />
+              <ReturnStat label="записались" value={overview.return_campaigns.booked} />
+              <ReturnStat label="истекло" value={overview.return_campaigns.expired} />
+            </div>
+            <div className="text-xs text-ink-soft">
+              Дополнительная выручка:{' '}
+              <strong>
+                {Math.round(Number(overview.return_campaigns.revenue)).toLocaleString('ru-RU')} ₽
+              </strong>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card>
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
@@ -102,6 +124,15 @@ export function AnalyticsPage() {
           Гибридные инсайты появятся, когда наберётся неделя данных.
         </p>
       </Card>
+    </div>
+  );
+}
+
+function ReturnStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-display text-lg text-ink">{value}</span>
+      <span className="text-[11px] text-mute">{label}</span>
     </div>
   );
 }

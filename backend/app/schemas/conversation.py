@@ -12,6 +12,7 @@ class MessageRead(BaseModel):
     direction: MessageDirection
     text: str | None
     llm_meta: dict[str, Any] | None
+    is_proactive: bool = False
     created_at: datetime
 
 

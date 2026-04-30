@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { Clients, Conversations } from '@/api';
-import type { ClientDetail, ConversationDetail, MessageRow } from '@/api/types';
+import { Clients, Conversations, ReturnCampaigns } from '@/api';
+import type {
+  ClientDetail,
+  ConversationDetail,
+  MessageRow,
+  ReturnCampaign,
+} from '@/api/types';
 import { Button, Card } from '@/components/ui';
 
 export function ChatDetail() {
@@ -10,6 +15,7 @@ export function ChatDetail() {
   const cid = Number(id);
   const [conv, setConv] = useState<ConversationDetail | null>(null);
   const [client, setClient] = useState<ClientDetail | null>(null);
+  const [campaigns, setCampaigns] = useState<ReturnCampaign[]>([]);
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
@@ -17,6 +23,7 @@ export function ChatDetail() {
     setConv(c);
     if (c.client_id) {
       Clients.get(c.client_id).then(setClient).catch(() => undefined);
+      ReturnCampaigns.forClient(c.client_id).then(setCampaigns).catch(() => undefined);
     }
   };
 
@@ -63,6 +70,25 @@ export function ChatDetail() {
           <StateBadge state={conv.state} until={conv.takeover_until} />
         </div>
       </header>
+
+      {(() => {
+        const now = new Date();
+        const active = campaigns.find(
+          (c) => c.status === 'sent' && new Date(c.discount_valid_until) > now
+        );
+        return active ? (
+          <Card className="bg-accent-soft border-accent-soft">
+            <div className="text-xs text-accent-dark">
+              Активна скидка <strong>{active.discount_percent}%</strong> до{' '}
+              {new Date(active.discount_valid_until).toLocaleDateString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+              })}
+              . Бот применит её автоматически при создании записи.
+            </div>
+          </Card>
+        ) : null;
+      })()}
 
       {client && (
         <Card>
@@ -127,10 +153,20 @@ function Bubble({ m }: { m: MessageRow }) {
       ? 'self-end bg-ink text-white rounded-2xl rounded-br-md'
       : 'self-end bg-coral-grad text-white rounded-2xl rounded-br-md';
   const label = isClient ? 'клиент' : isMaster ? 'вы' : 'бот';
+  const proactiveKind = m.is_proactive
+    ? (m.llm_meta as { proactive_kind?: string } | null)?.proactive_kind
+    : null;
+  const proactiveLabel: Record<string, string> = {
+    return: 'возврат · бот написал первым',
+    service_reminder: 'напоминание · бот написал первым',
+  };
   return (
     <div className={`max-w-[80%] flex flex-col ${isClient ? 'items-start' : 'items-end'}`}>
       <span className="text-[10px] uppercase tracking-wider text-mute mb-0.5">
         {label}
+        {proactiveKind && (
+          <span className="ml-1 text-accent-dark">· {proactiveLabel[proactiveKind] ?? 'бот написал первым'}</span>
+        )}
       </span>
       <div className={`px-3.5 py-2 text-[14px] leading-snug ${cls} shadow-sm`}>
         {m.text || ''}

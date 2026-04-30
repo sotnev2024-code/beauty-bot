@@ -8,9 +8,16 @@ from pydantic import BaseModel
 from sqlalchemy import distinct, func, select
 
 from app.api.deps import CurrentMaster, SessionDep
-from app.models import Booking, BookingStatus, Client, Conversation
+from app.models import Booking, BookingStatus, Client, Conversation, ReturnCampaign
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+class ReturnCampaignsBlock(BaseModel):
+    sent: int
+    booked: int
+    expired: int
+    revenue: Decimal
 
 
 class OverviewResponse(BaseModel):
@@ -22,6 +29,7 @@ class OverviewResponse(BaseModel):
     revenue: Decimal
     new_clients: int
     active_conversations: int
+    return_campaigns: ReturnCampaignsBlock
 
 
 class DashboardResponse(BaseModel):
@@ -98,6 +106,41 @@ async def overview(
         )
     )
 
+    rc_sent = await session.scalar(
+        select(func.count()).select_from(ReturnCampaign).where(
+            ReturnCampaign.master_id == master.id,
+            ReturnCampaign.sent_at >= win_start,
+            ReturnCampaign.sent_at < win_end,
+        )
+    )
+    rc_booked = await session.scalar(
+        select(func.count()).select_from(ReturnCampaign).where(
+            ReturnCampaign.master_id == master.id,
+            ReturnCampaign.sent_at >= win_start,
+            ReturnCampaign.sent_at < win_end,
+            ReturnCampaign.status == "booked",
+        )
+    )
+    rc_expired = await session.scalar(
+        select(func.count()).select_from(ReturnCampaign).where(
+            ReturnCampaign.master_id == master.id,
+            ReturnCampaign.sent_at >= win_start,
+            ReturnCampaign.sent_at < win_end,
+            ReturnCampaign.status.in_(["expired", "expired_late_response"]),
+        )
+    )
+    rc_revenue = await session.scalar(
+        select(func.coalesce(func.sum(Booking.price), 0))
+        .join(ReturnCampaign, ReturnCampaign.booking_id == Booking.id)
+        .where(
+            ReturnCampaign.master_id == master.id,
+            ReturnCampaign.sent_at >= win_start,
+            ReturnCampaign.sent_at < win_end,
+            ReturnCampaign.status == "booked",
+            Booking.status == BookingStatus.DONE,
+        )
+    )
+
     return OverviewResponse(
         period_from=f,
         period_to=t,
@@ -107,6 +150,12 @@ async def overview(
         revenue=Decimal(revenue or 0),
         new_clients=new_clients or 0,
         active_conversations=active_conv or 0,
+        return_campaigns=ReturnCampaignsBlock(
+            sent=rc_sent or 0,
+            booked=rc_booked or 0,
+            expired=rc_expired or 0,
+            revenue=Decimal(rc_revenue or 0),
+        ),
     )
 
 
