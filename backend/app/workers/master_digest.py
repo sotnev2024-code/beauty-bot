@@ -1,4 +1,4 @@
-"""Daily digest for masters at 10:00 local — list of today's bookings."""
+"""Daily digest for masters at the local hour configured in bot_settings."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Booking, BookingStatus, Client, Master, Service
+from app.models import Booking, BookingStatus, BotSettings, Client, Master, Service
 
 log = logging.getLogger(__name__)
 
-DIGEST_HOUR_LOCAL = 10
+DEFAULT_DIGEST_HOUR_LOCAL = 10
 
 Sender = Callable[..., Awaitable[None]]
 
@@ -26,10 +26,11 @@ async def send_due_master_digests(
     now: datetime | None = None,
     force_master_id: int | None = None,
 ) -> int:
-    """Send each master a list of today's bookings at 10:00 local.
+    """Send each master a digest of today's bookings at their configured hour.
 
     Idempotent within an hour: the cron tick fires once per hour at minute 0,
-    and we only emit when local hour matches DIGEST_HOUR_LOCAL.
+    and we only emit when local hour matches bot_settings.master_digest_hour.
+    Disabled masters (bot_settings.master_digest_enabled=false) are skipped.
     """
     now = now or datetime.now(UTC)
 
@@ -42,8 +43,14 @@ async def send_due_master_digests(
     for master in masters:
         tz = _tz(master)
         local_now = now.astimezone(tz)
-        if force_master_id is None and local_now.hour != DIGEST_HOUR_LOCAL:
-            continue
+        bs = await session.get(BotSettings, master.id)
+        digest_hour = bs.master_digest_hour if bs else DEFAULT_DIGEST_HOUR_LOCAL
+        digest_enabled = bs.master_digest_enabled if bs else True
+        if force_master_id is None:
+            if not digest_enabled:
+                continue
+            if local_now.hour != digest_hour:
+                continue
 
         # Window: today 00:00–24:00 in master's tz.
         day_start_local = datetime.combine(local_now.date(), time(0), tzinfo=tz)

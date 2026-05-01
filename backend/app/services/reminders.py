@@ -17,7 +17,15 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Booking, BookingStatus, Client, Master, Reminder, ReminderType
+from app.models import (
+    Booking,
+    BookingStatus,
+    BotSettings,
+    Client,
+    Master,
+    Reminder,
+    ReminderType,
+)
 
 log = logging.getLogger(__name__)
 
@@ -42,15 +50,30 @@ CLIENT_TEMPLATES: dict[ReminderType, str] = {
     ),
 }
 
-# Master-targeted alerts.
+# Master-targeted alerts. {when} is the human-readable lead time
+# (e.g. "час" / "30 минут"), filled in by render() from the booking's
+# scheduled time.
 MASTER_TEMPLATES: dict[ReminderType, str] = {
     ReminderType.MASTER_BOOKING_1H: (
-        "🔔 Через час придёт {client_name} в {time}.{service_line}"
+        "🔔 Через {when} придёт {client_name} в {time}.{service_line}"
     ),
     ReminderType.MASTER_BOOKING_10M: (
-        "⏰ Через 10 минут — {client_name} ({time}).{service_line}"
+        "⏰ Через {when} — {client_name} ({time}).{service_line}"
     ),
 }
+
+
+def _human_lead(minutes: int) -> str:
+    if minutes <= 0:
+        return "пару минут"
+    if minutes < 60:
+        return f"{minutes} мин"
+    h = minutes // 60
+    rem = minutes % 60
+    hours_word = "час" if h == 1 else ("часа" if 2 <= h <= 4 else "часов")
+    if rem == 0:
+        return f"{h} {hours_word}" if h > 1 else "час"
+    return f"{h} {hours_word} {rem} мин"
 
 
 def _is_master_reminder(t: ReminderType) -> bool:
@@ -67,6 +90,7 @@ def render(
     client_name: str,
     starts_at_local: str,
     service_name: str | None,
+    lead_minutes: int | None = None,
 ) -> str:
     template = MASTER_TEMPLATES.get(type_) or CLIENT_TEMPLATES.get(type_)
     if template is None:
@@ -76,6 +100,7 @@ def render(
         client_name=client_name or "клиент",
         time=starts_at_local,
         service_line=service_line,
+        when=_human_lead(lead_minutes) if lead_minutes is not None else "",
     )
 
 
@@ -86,12 +111,18 @@ async def schedule_booking_reminders(
 ) -> list[Reminder]:
     """Create reminder rows for a fresh booking. APScheduler picks them up.
 
-    Schedules four entries:
-      * client BOOKING_24H (only if 24h ahead is still in the future)
-      * client BOOKING_2H
-      * master MASTER_BOOKING_1H
-      * master MASTER_BOOKING_10M
+    Schedules:
+      * client BOOKING_24H (always-on; only if 24h ahead is still in the future)
+      * client BOOKING_2H  (always-on)
+      * master MASTER_BOOKING_1H (skipped when bot_settings.master_pre_visit_offsets
+        does not include 60 minutes, or master_pre_visit_enabled=false)
+      * master MASTER_BOOKING_10M (similar; toggled via 10-min offset)
       * client FEEDBACK (2h after the booking ends)
+
+    Pre-visit master offsets are configurable per-master via
+    bot_settings.master_pre_visit_offsets (minutes). The schema currently
+    supports the 1-hour and 10-minute reminder types; offsets outside those
+    standard buckets are rounded to the nearest supported one.
     """
     rows: list[Reminder] = []
     now = datetime.now(booking.starts_at.tzinfo)
@@ -114,24 +145,31 @@ async def schedule_booking_reminders(
                 client_id=booking.client_id,
             )
         )
-    if booking.starts_at - timedelta(hours=1) > now:
-        rows.append(
-            Reminder(
-                type=ReminderType.MASTER_BOOKING_1H,
-                target_at=booking.starts_at - timedelta(hours=1),
-                booking_id=booking.id,
-                client_id=booking.client_id,
+
+    bs = await session.get(BotSettings, booking.master_id)
+    pre_enabled = bs.master_pre_visit_enabled if bs else True
+    offsets_min = list(bs.master_pre_visit_offsets) if bs else [10, 60]
+
+    if pre_enabled:
+        for offset in offsets_min:
+            target = booking.starts_at - timedelta(minutes=int(offset))
+            if target <= now:
+                continue
+            # Map offset → reminder type. 60 min → 1h; everything else → 10m bucket.
+            kind = (
+                ReminderType.MASTER_BOOKING_1H
+                if int(offset) >= 60
+                else ReminderType.MASTER_BOOKING_10M
             )
-        )
-    if booking.starts_at - timedelta(minutes=10) > now:
-        rows.append(
-            Reminder(
-                type=ReminderType.MASTER_BOOKING_10M,
-                target_at=booking.starts_at - timedelta(minutes=10),
-                booking_id=booking.id,
-                client_id=booking.client_id,
+            rows.append(
+                Reminder(
+                    type=kind,
+                    target_at=target,
+                    booking_id=booking.id,
+                    client_id=booking.client_id,
+                )
             )
-        )
+
     rows.append(
         Reminder(
             type=ReminderType.FEEDBACK,
@@ -192,11 +230,19 @@ async def deliver_due_reminders(
             continue
 
         starts_local = booking.starts_at.astimezone(_master_tz(master)).strftime("%H:%M")
+        lead_min = None
+        if r.type in (
+            ReminderType.MASTER_BOOKING_1H,
+            ReminderType.MASTER_BOOKING_10M,
+        ):
+            delta = booking.starts_at - r.target_at
+            lead_min = max(1, int(delta.total_seconds() // 60))
         text = render(
             r.type,
             client_name=client.name or "",
             starts_at_local=starts_local,
             service_name=service_name,
+            lead_minutes=lead_min,
         )
         if not text:
             r.sent_at = now

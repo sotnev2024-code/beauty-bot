@@ -71,6 +71,10 @@ export interface BotSettings {
   message_format: MessageFormat;
   is_enabled: boolean;
   reminders_enabled: boolean;
+  master_digest_enabled: boolean;
+  master_digest_hour: number;
+  master_pre_visit_enabled: boolean;
+  master_pre_visit_offsets: number[];
   configured_at: string | null;
   updated_at: string;
 }
@@ -80,6 +84,10 @@ export interface BotSettingsUpdate {
   voice_tone?: VoiceTone;
   message_format?: MessageFormat;
   is_enabled?: boolean;
+  master_digest_enabled?: boolean;
+  master_digest_hour?: number;
+  master_pre_visit_enabled?: boolean;
+  master_pre_visit_offsets?: number[];
 }
 
 export interface ServiceCategory {

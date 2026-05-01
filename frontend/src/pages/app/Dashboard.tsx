@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Analytics } from '@/api';
-import type { DashboardData, Plan } from '@/api/types';
-import { Card } from '@/components/ui';
+import type { DashboardData, Master, Plan } from '@/api/types';
+import { Button, Card, Input, Sheet } from '@/components/ui';
 import { tgPhotoUrl } from '@/lib/tg';
 import { useMaster } from '@/store/master';
 
@@ -14,9 +14,10 @@ const PLAN_LABEL: Record<Plan, string> = {
 };
 
 export function Dashboard() {
-  const { master } = useMaster();
+  const { master, update } = useMaster();
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editName, setEditName] = useState(false);
 
   useEffect(() => {
     Analytics.dashboard()
@@ -35,6 +36,7 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Master profile card */}
       <Card>
         <div className="flex items-center gap-3">
           {photoUrl ? (
@@ -50,23 +52,27 @@ export function Dashboard() {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className="font-display text-xl text-ink truncate">
-              {master?.name ?? 'Мастер'}
-            </div>
+            <button
+              type="button"
+              onClick={() => setEditName(true)}
+              className="text-left flex items-center gap-1 group"
+            >
+              <span className="font-display text-xl text-ink truncate">
+                {master?.name ?? 'Мастер'}
+              </span>
+              <span className="text-mute group-hover:text-ink text-sm" aria-hidden>
+                ✎
+              </span>
+            </button>
             {master?.niche && (
               <div className="text-xs text-mute truncate">{master.niche}</div>
             )}
           </div>
-          {master && (
-            <Link
-              to="/app/pricing"
-              className="px-2.5 py-1 rounded-full text-xs font-semibold bg-accent-soft text-accent-dark whitespace-nowrap"
-            >
-              {PLAN_LABEL[master.plan]}
-            </Link>
-          )}
         </div>
       </Card>
+
+      {/* Plan / subscription card — bigger */}
+      {master && <PlanCard master={master} />}
 
       {error && (
         <Card>
@@ -106,6 +112,114 @@ export function Dashboard() {
         title="Аналитика"
         subtitle="Записи, выручка, инсайты"
       />
+
+      <Sheet open={editName} onClose={() => setEditName(false)} title="Имя мастера">
+        <NameForm
+          initial={master?.name ?? ''}
+          onSave={async (v) => {
+            await update({ name: v });
+            setEditName(false);
+          }}
+        />
+      </Sheet>
+    </div>
+  );
+}
+
+function PlanCard({ master }: { master: Master }) {
+  const now = new Date();
+  const trialEnds = master.trial_ends_at ? new Date(master.trial_ends_at) : null;
+  const subEnds = master.subscription_active_until
+    ? new Date(master.subscription_active_until)
+    : null;
+
+  const trialActive = trialEnds && trialEnds > now;
+  const subActive = subEnds && subEnds > now;
+
+  let subtitle: string;
+  let activeUntil: Date | null = null;
+  if (subActive) {
+    subtitle = 'Подписка активна';
+    activeUntil = subEnds;
+  } else if (trialActive) {
+    subtitle = 'Пробный период';
+    activeUntil = trialEnds;
+  } else {
+    subtitle = 'Подписка истекла';
+  }
+
+  const daysLeft = activeUntil
+    ? Math.max(0, Math.ceil((activeUntil.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  return (
+    <Link to="/app/pricing" className="block">
+      <Card className="bg-coral-grad text-white border-transparent">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wider opacity-80 font-semibold">
+              Тариф
+            </span>
+            <span className="font-display text-2xl">{PLAN_LABEL[master.plan]}</span>
+            <span className="text-xs opacity-90">{subtitle}</span>
+          </div>
+          <div className="text-right">
+            {activeUntil ? (
+              <>
+                <div className="font-display text-2xl leading-none">{daysLeft}</div>
+                <div className="text-[11px] opacity-80 mt-0.5">
+                  {plural(daysLeft, ['день', 'дня', 'дней'])} осталось
+                </div>
+                <div className="text-[10px] opacity-70 mt-1">
+                  до{' '}
+                  {activeUntil.toLocaleDateString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                  })}
+                </div>
+              </>
+            ) : (
+              <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-white/20">
+                продлить →
+              </span>
+            )}
+          </div>
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+function NameForm({
+  initial,
+  onSave,
+}: {
+  initial: string;
+  onSave: (v: string) => Promise<void>;
+}) {
+  const [name, setName] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      await onSave(name.trim());
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      <Input
+        label="Имя"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Анна"
+      />
+      <Button onClick={save} disabled={busy || !name.trim()} full>
+        Сохранить
+      </Button>
     </div>
   );
 }
@@ -157,4 +271,12 @@ function fmtMoney(v: string | number | undefined): string {
   const n = typeof v === 'string' ? Number(v) : v;
   if (Number.isNaN(n)) return '—';
   return `${Math.round(n).toLocaleString('ru-RU')} ₽`;
+}
+
+function plural(n: number, forms: [string, string, string]): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return forms[0];
+  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return forms[1];
+  return forms[2];
 }

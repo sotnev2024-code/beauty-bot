@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -21,6 +22,24 @@ class BotSettings(Base):
     message_format: Mapped[str] = mapped_column(String(20), nullable=False, default="hybrid")
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     reminders_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Master-side daily digest about today's bookings.
+    master_digest_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    master_digest_hour: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=10
+    )
+
+    # Master-side pre-visit reminders. Stored as a list of integers — minutes
+    # before booking starts_at — and per-master toggle.
+    master_pre_visit_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    master_pre_visit_offsets: Mapped[list[int]] = mapped_column(
+        JSONB, nullable=False, default=lambda: [10, 60]
+    )
+
     configured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

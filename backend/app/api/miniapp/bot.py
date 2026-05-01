@@ -46,6 +46,12 @@ async def patch_settings(
 ) -> BotSettingsRead:
     bs = await _get_or_create(session, master.id)
     data = payload.model_dump(exclude_unset=True)
+
+    # Normalize pre-visit offsets: positive ints, ≤ 24h, sorted+dedup.
+    if "master_pre_visit_offsets" in data and data["master_pre_visit_offsets"] is not None:
+        cleaned = sorted({int(x) for x in data["master_pre_visit_offsets"] if 1 <= int(x) <= 1440})
+        data["master_pre_visit_offsets"] = cleaned
+
     for k, v in data.items():
         setattr(bs, k, v)
     if data and bs.configured_at is None:
