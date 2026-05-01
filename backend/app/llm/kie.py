@@ -26,6 +26,18 @@ JSON_INSTRUCTION = (
     "ни markdown, ни текста до/после, ни обёртки ```json. Только сам объект."
 )
 
+# Forceful, model-agnostic preamble. We send it as a *separate* system message
+# at the very start so the conversational/persona instructions that follow
+# don't dilute the format requirement.
+TECH_PREAMBLE = (
+    "You are a JSON-only API. Your entire output is a SINGLE valid JSON object — "
+    "no prose, no markdown, no code fences, no commentary before or after. "
+    "The first character of your reply MUST be `{` and the last character MUST be `}`. "
+    'Required schema: {"reply": <string>, "actions": <array>, "escalate": <boolean>, "collected": <object>}. '
+    'If you would otherwise greet the user, encode it as {"reply":"<greeting>","actions":[],"escalate":false,"collected":{}}. '
+    "Any other format is a hard failure."
+)
+
 
 @dataclass(slots=True)
 class KieConfig:
@@ -104,14 +116,24 @@ class KieProvider(LLMProvider):
     ) -> list[dict[str, Any]]:
         sys_text = system_prompt.rstrip() + JSON_INSTRUCTION
         msgs: list[dict[str, Any]] = [
-            {"role": "system", "content": [{"type": "text", "text": sys_text}]}
+            # Preamble first so the JSON contract is the first thing the model
+            # sees, regardless of how long the persona system prompt is.
+            {"role": "system", "content": [{"type": "text", "text": TECH_PREAMBLE}]},
+            {"role": "system", "content": [{"type": "text", "text": sys_text}]},
         ]
         for m in history:
             msgs.append(
                 {"role": m.role, "content": [{"type": "text", "text": m.content}]}
             )
+        # Wrap the user message with a final "JSON only" reminder so it sits
+        # immediately before generation — many models obey the instruction
+        # closest to the cursor.
+        wrapped_user = (
+            f"{user_message}\n\n"
+            "[reply with the JSON object only — first char `{`, last char `}`]"
+        )
         msgs.append(
-            {"role": "user", "content": [{"type": "text", "text": user_message}]}
+            {"role": "user", "content": [{"type": "text", "text": wrapped_user}]}
         )
         return msgs
 
@@ -120,6 +142,9 @@ class KieProvider(LLMProvider):
         payload = {
             "messages": messages,
             "reasoning_effort": self._cfg.reasoning_effort,
+            # Some kie.ai-fronted models honour the OpenAI-style response_format
+            # hint even when it's not in the published docs. Harmless if ignored.
+            "response_format": {"type": "json_object"},
         }
         headers = {
             "Authorization": f"Bearer {self._cfg.api_key}",
@@ -156,12 +181,25 @@ class KieProvider(LLMProvider):
         cleaned = _extract_json_object(text)
         if not cleaned:
             usage = response.get("usage") or {}
+            stripped = text.strip()
             log.warning(
                 "kie returned no JSON. finish=%s usage=%s raw[:300]=%r",
                 choice.get("finish_reason"),
                 usage,
                 text[:300],
             )
+            # Last-ditch graceful fallback: a non-empty, short, prose reply
+            # from the model is wrapped into the expected schema so the user
+            # at least sees a coherent message instead of a generic «Ошибка теста».
+            # Bigger payloads almost certainly mean broken output, fall through.
+            if stripped and len(stripped) <= 500:
+                return LLMResult(
+                    reply=stripped,
+                    actions=[],
+                    escalate=False,
+                    collected_data={},
+                    raw=response,
+                )
             raise LLMServiceError("kie content has no JSON object")
 
         try:
