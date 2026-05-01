@@ -144,7 +144,18 @@ SCENARIOS = [
         "user": "Здравствуйте, у вас есть массаж лица?",
         "expect": {
             "reply_nonempty": True,
-            "must_not_contain": ["масса", "колорист", "стилист", "посоветую", "порекомендую", "обратитесь"],
+            # Patterns that indicate the bot is recommending an EXTERNAL
+            # specialist, which is exactly what we want to forbid. Polite
+            # «массаж лица я не делаю» is fine — that does not match these.
+            "must_not_match": [
+                r"массажист",
+                r"колорист",
+                r"стилист",
+                r"визажист",
+                r"могу\s+(посоветовать|порекомендовать|направить)",
+                r"обратитесь\s+к",
+                r"направ(ить|лю)\s+вас",
+            ],
         },
     },
     {
@@ -195,7 +206,11 @@ SCENARIOS = [
 # ---------------------------------------------------------------- HTTP
 
 
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) BeautyDev-LLM-Compare/1.0"
+
+
 def _post(url: str, headers: dict, body: dict, timeout: float = 60.0):
+    headers = {"User-Agent": USER_AGENT, **headers}
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     t0 = time.monotonic()
@@ -358,10 +373,10 @@ def evaluate(scenario, result) -> dict:
     }
     if e.get("no_actions"):
         checks["no_actions"] = len(actions) == 0
-    if e.get("must_not_contain"):
+    if e.get("must_not_match"):
         low = reply.lower()
-        leak = [w for w in e["must_not_contain"] if w.lower() in low]
-        checks["no_forbidden_words"] = len(leak) == 0
+        leak = [p for p in e["must_not_match"] if re.search(p, low, re.IGNORECASE)]
+        checks["no_external_recommendation"] = len(leak) == 0
         if leak:
             checks["forbidden_leak"] = leak  # for debug
     if e.get("no_create_booking"):
