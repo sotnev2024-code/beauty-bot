@@ -113,6 +113,18 @@ def _schedule_block(schedule_text: str | None) -> str:
     return "\nРасписание мастера (использовать ТОЛЬКО эти окна для записи):\n" + schedule_text.strip()
 
 
+def _busy_slots_block(busy_slots_text: str | None) -> str:
+    if not busy_slots_text:
+        return ""
+    return (
+        "\nЗАНЯТЫЕ СЛОТЫ (ближайшие 14 дней — НИ В КОЕМ СЛУЧАЕ не записывать в эти "
+        "интервалы):\n"
+        + busy_slots_text.strip()
+        + "\nЕсли клиент назвал занятое время — извинись, скажи, что слот занят, "
+        "и предложи 1–2 ближайших свободных в рабочих часах."
+    )
+
+
 def _kb_block(kb_short_lines: list[str] | None) -> str:
     if not kb_short_lines:
         return ""
@@ -150,6 +162,7 @@ def build_bot_prompt(
     kb_short_lines: list[str] | None,
     return_context: dict | None,
     schedule_text: str | None = None,
+    busy_slots_text: str | None = None,
 ) -> str:
     parts: list[str] = [
         BASE.format(
@@ -161,6 +174,7 @@ def build_bot_prompt(
         _now_block(timezone),
         _services_block(services_text),
         _schedule_block(schedule_text),
+        _busy_slots_block(busy_slots_text),
         _kb_block(kb_short_lines),
         _return_block(return_context),
         FEW_SHOT_EXAMPLES,

@@ -28,6 +28,10 @@ from app.models import (
     Service,
     ServiceCategory,
 )
+from app.services.dialog import (
+    busy_slots_text_for_master,
+    schedule_text_for_master,
+)
 
 router = APIRouter(prefix="/test", tags=["test"])
 
@@ -64,6 +68,10 @@ async def test_dialog(
 
     services_text = await _services_block(session, master.id)
     kb_short_lines = await _kb_short_lines(session, master.id)
+    schedule_text = await schedule_text_for_master(session, master.id)
+    busy_slots_text = await busy_slots_text_for_master(
+        session, master.id, master_tz_name=master.timezone or "Europe/Moscow"
+    )
 
     system_prompt = build_bot_prompt(
         master_name=master.name,
@@ -74,6 +82,8 @@ async def test_dialog(
         services_text=services_text,
         kb_short_lines=kb_short_lines,
         return_context=None,
+        schedule_text=schedule_text,
+        busy_slots_text=busy_slots_text,
     )
 
     history = [

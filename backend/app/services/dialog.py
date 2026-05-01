@@ -13,7 +13,7 @@ The funnel concept is gone — there's no `current_step_id` lookup. Instead:
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -64,6 +64,9 @@ async def process_client_message(
     kb_short_lines = await _kb_short_lines(session, master.id)
     return_context = await _return_context(session, master_id=master.id, client_id=conversation.client_id)
     schedule_text = await _schedule_text(session, master.id)
+    busy_slots_text = await busy_slots_text_for_master(
+        session, master.id, master_tz_name=master.timezone or "Europe/Moscow"
+    )
 
     system_prompt = build_bot_prompt(
         master_name=master.name,
@@ -75,6 +78,7 @@ async def process_client_message(
         kb_short_lines=kb_short_lines,
         return_context=return_context,
         schedule_text=schedule_text,
+        busy_slots_text=busy_slots_text,
     )
 
     meta: dict[str, Any]
@@ -227,6 +231,65 @@ async def _services_block(session: AsyncSession, master_id: int) -> str | None:
         desc_part = f" — {s.description}" if s.description else ""
         lines.append(
             f"- id={s.id}: {s.name}{cat_part}, {s.duration_minutes} мин, {s.price} ₽{desc_part}"
+        )
+    return "\n".join(lines)
+
+
+async def schedule_text_for_master(session: AsyncSession, master_id: int) -> str | None:
+    """Public wrapper used by both dialog.py (real Business chat) and the test
+    chat endpoint. Same body as the original private helper.
+    """
+    return await _schedule_text(session, master_id)
+
+
+async def busy_slots_text_for_master(
+    session: AsyncSession,
+    master_id: int,
+    *,
+    master_tz_name: str,
+    days_ahead: int = 14,
+) -> str | None:
+    """List non-cancelled bookings in the next N days as a compact block."""
+    from zoneinfo import ZoneInfo
+
+    try:
+        tz = ZoneInfo(master_tz_name or "Europe/Moscow")
+    except Exception:
+        tz = ZoneInfo("Europe/Moscow")
+
+    now = datetime.now(UTC)
+    until = now + timedelta(days=days_ahead)
+
+    from app.models import Booking, BookingStatus  # local import to avoid cycle
+
+    rows = (
+        (
+            await session.execute(
+                select(Booking)
+                .where(
+                    Booking.master_id == master_id,
+                    Booking.status.notin_([BookingStatus.CANCELLED, BookingStatus.NO_SHOW]),
+                    Booking.starts_at >= now,
+                    Booking.starts_at < until,
+                )
+                .order_by(Booking.starts_at)
+                .limit(40)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return None
+
+    weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    lines: list[str] = []
+    for b in rows:
+        s_local = b.starts_at.astimezone(tz)
+        e_local = b.ends_at.astimezone(tz)
+        lines.append(
+            f"- {s_local.strftime('%d.%m')} ({weekdays[s_local.weekday()]}) "
+            f"{s_local.strftime('%H:%M')}–{e_local.strftime('%H:%M')} — занято"
         )
     return "\n".join(lines)
 
