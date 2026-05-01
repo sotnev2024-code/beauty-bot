@@ -14,8 +14,35 @@ interface Msg {
   };
 }
 
+const STORAGE_KEY = 'bot_test_history_v1';
+const STORAGE_LIMIT = 50; // keep at most this many turns to bound localStorage
+
+function loadStored(): Msg[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (m) =>
+        m && typeof m.text === 'string' && (m.role === 'user' || m.role === 'assistant'),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveStored(history: Msg[]): void {
+  try {
+    const trimmed = history.slice(-STORAGE_LIMIT);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+  } catch {
+    // quota / private mode — ignore
+  }
+}
+
 export function BotTestPage() {
-  const [history, setHistory] = useState<Msg[]>([]);
+  const [history, setHistory] = useState<Msg[]>(() => loadStored());
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +51,11 @@ export function BotTestPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history.length, busy]);
+
+  // Persist on any history change.
+  useEffect(() => {
+    saveStored(history);
+  }, [history]);
 
   // Send a specific text (used by both the input form and the suggested
   // buttons under bot replies).
@@ -72,6 +104,11 @@ export function BotTestPage() {
     setHistory([]);
     setInput('');
     setError(null);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
   };
 
   return (
