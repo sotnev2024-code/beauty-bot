@@ -3,6 +3,7 @@ export { AppLayout } from './AppLayout';
 export { Calendar } from './Calendar';
 export { ChatDetail } from './ChatDetail';
 export { ChatList } from './ChatList';
+export { ClientDetailPage } from './ClientDetailPage';
 export { ClientsPage } from './ClientsPage';
 export { Dashboard } from './Dashboard';
 export { Paywall } from './Paywall';

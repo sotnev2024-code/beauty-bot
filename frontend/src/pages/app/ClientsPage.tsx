@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { Clients } from '@/api';
 import type { ClientListItem } from '@/api/types';
@@ -32,28 +33,30 @@ export function ClientsPage() {
       ) : (
         <div className="flex flex-col gap-2">
           {list.map((c) => (
-            <Card key={c.id}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col">
-                  <span className="text-sm font-semibold text-ink">
-                    {c.name ?? `tg:${c.telegram_id}`}
-                  </span>
-                  <span className="text-xs text-mute">
-                    {c.phone ?? '—'} · {c.visits_total} визит(ов)
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1 justify-end">
-                  {c.segments.map((s) => (
-                    <span
-                      key={s}
-                      className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-divider text-ink-soft"
-                    >
-                      {s}
+            <Link key={c.id} to={`/app/clients/${c.id}`} className="block">
+              <Card>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-semibold text-ink truncate">
+                      {c.name ?? `tg:${c.telegram_id}`}
                     </span>
-                  ))}
+                    <span className="text-xs text-mute">
+                      {c.phone ?? '—'} · {c.visits_total} визит(ов)
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 justify-end">
+                    {c.segments.map((s) => (
+                      <span
+                        key={s}
+                        className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-divider text-ink-soft"
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

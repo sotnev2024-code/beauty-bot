@@ -11,6 +11,7 @@ import {
   Calendar,
   ChatDetail,
   ChatList,
+  ClientDetailPage,
   ClientsPage,
   Dashboard,
   Paywall,
@@ -144,6 +145,7 @@ export default function App() {
                 <Route path="/app" element={<DashboardOrPaywall />} />
                 <Route path="/app/calendar" element={<Calendar />} />
                 <Route path="/app/clients" element={<ClientsPage />} />
+                <Route path="/app/clients/:id" element={<ClientDetailPage />} />
                 <Route path="/app/chats" element={<ChatList />} />
                 <Route path="/app/chats/:id" element={<ChatDetail />} />
                 <Route path="/app/settings" element={<SettingsPage />} />
