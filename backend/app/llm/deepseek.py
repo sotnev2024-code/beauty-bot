@@ -181,6 +181,13 @@ class DeepSeekProvider(LLMProvider):
             actions_raw = []
         actions: list[dict[str, Any]] = [a for a in actions_raw if isinstance(a, dict) and a.get("type")]
 
+        buttons_raw = args.get("buttons") or []
+        buttons: list[str] = (
+            [str(b).strip() for b in buttons_raw if isinstance(b, str) and str(b).strip()]
+            if isinstance(buttons_raw, list)
+            else []
+        )
+
         # Back-compat: synthesize actions from the legacy slot_intent /
         # portfolio_request fields (older models / tests that haven't been
         # migrated yet emit those instead of `actions`).
@@ -204,6 +211,7 @@ class DeepSeekProvider(LLMProvider):
         return LLMResult(
             reply=reply.strip(),
             actions=actions,
+            buttons=buttons,
             escalate=bool(args.get("escalate", False)),
             collected_data=dict(args.get("collected") or args.get("collected_data") or {}),
             raw=response,

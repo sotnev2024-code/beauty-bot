@@ -165,6 +165,7 @@ export const TestDialog = {
       .post<{
         reply: string;
         actions: { type: string; [k: string]: unknown }[];
+        buttons: string[];
         escalate: boolean;
         collected_data: Record<string, unknown>;
       }>('/test/dialog', payload)

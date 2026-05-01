@@ -220,6 +220,13 @@ class KieProvider(LLMProvider):
             actions_raw = []
         actions = [a for a in actions_raw if isinstance(a, dict) and a.get("type")]
 
+        buttons_raw = args.get("buttons") or []
+        buttons = (
+            [str(b).strip() for b in buttons_raw if isinstance(b, str) and str(b).strip()]
+            if isinstance(buttons_raw, list)
+            else []
+        )
+
         # Mirror to legacy fields for back-compat with existing dialog code paths.
         slot_intent: dict[str, Any] | None = None
         portfolio_request = False
@@ -232,6 +239,7 @@ class KieProvider(LLMProvider):
         return LLMResult(
             reply=reply.strip(),
             actions=actions,
+            buttons=buttons,
             escalate=bool(args.get("escalate", False)),
             collected_data=dict(args.get("collected") or args.get("collected_data") or {}),
             raw=response,

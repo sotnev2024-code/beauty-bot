@@ -36,6 +36,10 @@ class LLMResult:
 
     reply: str
     actions: list[dict[str, Any]] = field(default_factory=list)
+    # Suggested choice buttons rendered under the bubble. Empty for plain
+    # text replies; populated for the «buttons» / «hybrid» formats when the
+    # current turn is a multiple-choice prompt (services, times, yes/no).
+    buttons: list[str] = field(default_factory=list)
     escalate: bool = False
     collected_data: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)

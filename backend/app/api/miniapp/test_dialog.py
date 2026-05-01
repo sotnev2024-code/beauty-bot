@@ -47,6 +47,7 @@ class TestDialogRequest(BaseModel):
 class TestDialogResponse(BaseModel):
     reply: str
     actions: list[dict[str, Any]]
+    buttons: list[str] = Field(default_factory=list)
     escalate: bool
     collected_data: dict[str, Any]
 
@@ -95,6 +96,7 @@ async def test_dialog(
     return TestDialogResponse(
         reply=result.reply,
         actions=result.actions,
+        buttons=result.buttons,
         escalate=result.escalate,
         collected_data=result.collected_data,
     )

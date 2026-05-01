@@ -6,6 +6,7 @@ import { Button, Card, Input } from '@/components/ui';
 interface Msg {
   role: 'user' | 'assistant';
   text: string;
+  buttons?: string[];
   meta?: {
     actions: { type: string; [k: string]: unknown }[];
     escalate: boolean;
@@ -24,24 +25,31 @@ export function BotTestPage() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history.length, busy]);
 
-  const send = async () => {
-    const text = input.trim();
-    if (!text || busy) return;
+  // Send a specific text (used by both the input form and the suggested
+  // buttons under bot replies).
+  const sendText = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
     setBusy(true);
     setError(null);
-    const next: Msg[] = [...history, { role: 'user', text }];
+    // Strip any pending buttons from the previous bot turn (they're spent).
+    const prior = history.map((m) =>
+      m.role === 'assistant' ? { ...m, buttons: undefined } : m,
+    );
+    const next: Msg[] = [...prior, { role: 'user', text: trimmed }];
     setHistory(next);
     setInput('');
     try {
       const res = await TestDialog.send({
         history: next.map((m) => ({ role: m.role, text: m.text })),
-        user_message: text,
+        user_message: trimmed,
       });
       setHistory((prev) => [
         ...prev,
         {
           role: 'assistant',
           text: res.reply,
+          buttons: res.buttons ?? [],
           meta: {
             actions: res.actions,
             escalate: res.escalate,
@@ -57,6 +65,8 @@ export function BotTestPage() {
       setBusy(false);
     }
   };
+
+  const send = () => sendText(input);
 
   const reset = () => {
     setHistory([]);
@@ -88,9 +98,18 @@ export function BotTestPage() {
             </p>
           </Card>
         ) : (
-          history.map((m, i) => <Bubble key={i} msg={m} />)
+          history.map((m, i) => (
+            <Bubble
+              key={i}
+              msg={m}
+              onPickButton={(text) => sendText(text)}
+              disabled={busy}
+            />
+          ))
         )}
-        {busy && <Bubble msg={{ role: 'assistant', text: '…' }} />}
+        {busy && (
+          <Bubble msg={{ role: 'assistant', text: '…' }} onPickButton={() => undefined} disabled />
+        )}
         <div ref={endRef} />
       </div>
 
@@ -122,19 +141,43 @@ export function BotTestPage() {
   );
 }
 
-function Bubble({ msg }: { msg: Msg }) {
+function Bubble({
+  msg,
+  onPickButton,
+  disabled,
+}: {
+  msg: Msg;
+  onPickButton: (text: string) => void;
+  disabled: boolean;
+}) {
   const isUser = msg.role === 'user';
   const cls = isUser
     ? 'self-end bg-ink text-white rounded-2xl rounded-br-md'
     : 'self-start bg-card text-ink border border-divider rounded-2xl rounded-bl-md';
   const label = isUser ? 'клиент' : 'бот';
   const actionTypes = (msg.meta?.actions ?? []).map((a) => a.type);
+  const buttons = msg.buttons ?? [];
   return (
     <div className={`max-w-[85%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-      <span className="text-[10px] uppercase tracking-wider text-mute mb-0.5">
-        {label}
-      </span>
+      <span className="text-[10px] uppercase tracking-wider text-mute mb-0.5">{label}</span>
       <div className={`px-3.5 py-2 text-[14px] leading-snug ${cls}`}>{msg.text}</div>
+
+      {!isUser && buttons.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-1.5">
+          {buttons.map((b, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onPickButton(b)}
+              disabled={disabled}
+              className="px-3 py-1.5 rounded-full text-xs font-semibold border border-accent text-accent-dark bg-card hover:bg-accent-soft disabled:opacity-50"
+            >
+              {b}
+            </button>
+          ))}
+        </div>
+      )}
+
       {(msg.meta?.escalate || actionTypes.length > 0) && (
         <div className="flex flex-wrap gap-1 mt-1">
           {msg.meta?.escalate && <Pill>escalate</Pill>}
