@@ -27,6 +27,12 @@ declare global {
           onClick: (cb: () => void) => void;
           offClick: (cb: () => void) => void;
         };
+        addToHomeScreen?: () => void;
+        checkHomeScreenStatus?: (
+          cb: (status: 'unsupported' | 'unknown' | 'added' | 'missed') => void,
+        ) => void;
+        platform?: string;
+        version?: string;
         colorScheme?: 'light' | 'dark';
         themeParams?: Record<string, string>;
       };
@@ -54,4 +60,39 @@ export function readyTelegram(): void {
   } catch {
     // outside Telegram — no-op
   }
+}
+
+/** Trigger Telegram's "Add to home screen" prompt (Bot API 8.0+). */
+export function addToHomeScreen(): void {
+  try {
+    tg?.addToHomeScreen?.();
+  } catch {
+    // not supported — no-op
+  }
+}
+
+/** True if the running Telegram client supports the addToHomeScreen API. */
+export function supportsHomeScreen(): boolean {
+  return typeof tg?.addToHomeScreen === 'function';
+}
+
+/**
+ * Async wrapper around checkHomeScreenStatus that resolves with the status
+ * or `null` if the runtime doesn't support it.
+ */
+export function homeScreenStatus(): Promise<
+  'unsupported' | 'unknown' | 'added' | 'missed' | null
+> {
+  return new Promise((resolve) => {
+    const fn = tg?.checkHomeScreenStatus;
+    if (!fn) {
+      resolve(null);
+      return;
+    }
+    try {
+      fn((s) => resolve(s));
+    } catch {
+      resolve(null);
+    }
+  });
 }

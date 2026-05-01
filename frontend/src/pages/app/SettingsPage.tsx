@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { BotSettings } from '@/api';
 import type { BotSettings as BotSettingsType } from '@/api/types';
 import { Button, Card } from '@/components/ui';
+import { addToHomeScreen, homeScreenStatus, supportsHomeScreen } from '@/lib/tg';
 
 const PRESET_OFFSETS: { value: number; label: string }[] = [
   { value: 10, label: '10 минут' },
@@ -26,6 +27,9 @@ export function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [hsStatus, setHsStatus] = useState<
+    'unsupported' | 'unknown' | 'added' | 'missed' | null
+  >(null);
 
   useEffect(() => {
     BotSettings.get()
@@ -37,7 +41,14 @@ export function SettingsPage() {
         setOffsets(new Set(s.master_pre_visit_offsets));
       })
       .catch(() => undefined);
+    homeScreenStatus().then(setHsStatus);
   }, []);
+
+  const onAddToHome = () => {
+    addToHomeScreen();
+    // Optimistic refresh after the user closes the dialog.
+    setTimeout(() => homeScreenStatus().then(setHsStatus), 1500);
+  };
 
   const toggleOffset = (v: number) => {
     setOffsets((prev) => {
@@ -158,6 +169,28 @@ export function SettingsPage() {
       <Button onClick={save} disabled={busy} full>
         {saved ? 'Сохранено ✓' : busy ? 'Сохраняем…' : 'Сохранить'}
       </Button>
+
+      {(supportsHomeScreen() || hsStatus === 'added') && (
+        <Card>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className="text-sm font-semibold text-ink">
+                📱 Добавить на главный экран
+              </span>
+              <span className="text-xs text-mute mt-0.5">
+                {hsStatus === 'added'
+                  ? 'Beauty.dev уже на главном экране телефона.'
+                  : 'Запускайте Beauty.dev одним тапом, как обычное приложение.'}
+              </span>
+            </div>
+            {hsStatus !== 'added' && (
+              <Button size="md" onClick={onAddToHome}>
+                Добавить
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
 
       <Card>
         <div className="flex flex-col gap-1">
