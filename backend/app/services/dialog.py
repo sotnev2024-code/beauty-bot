@@ -32,8 +32,11 @@ from app.models import (
     Message,
     MessageDirection,
     ReturnCampaign,
+    Schedule,
+    ScheduleBreak,
     Service,
     ServiceCategory,
+    TimeOff,
 )
 from app.services.booking_create import BookingError, create_booking
 
@@ -60,6 +63,7 @@ async def process_client_message(
     services_text = await _services_block(session, master.id)
     kb_short_lines = await _kb_short_lines(session, master.id)
     return_context = await _return_context(session, master_id=master.id, client_id=conversation.client_id)
+    schedule_text = await _schedule_text(session, master.id)
 
     system_prompt = build_bot_prompt(
         master_name=master.name,
@@ -70,6 +74,7 @@ async def process_client_message(
         services_text=services_text,
         kb_short_lines=kb_short_lines,
         return_context=return_context,
+        schedule_text=schedule_text,
     )
 
     meta: dict[str, Any]
@@ -105,6 +110,18 @@ async def process_client_message(
                 actions=actions,
                 collected=result.collected_data,
                 meta=meta,
+            )
+
+        # If the LLM tried to book but the server rejected the slot
+        # (out-of-hours, time-off, collision, etc.) the LLM's
+        # «Записал вас, ...» reply is now a lie. Replace it with an apology
+        # so the client doesn't believe a non-existent booking was made.
+        if meta.get("booking_skipped"):
+            reason = meta.get("booking_failed_reason") or "оно вне моего расписания"
+            reply_text = (
+                "Извините, выбранное время не получится — "
+                + reason
+                + ". Подберу другое время и предложу варианты."
             )
     except LLMServiceError as e:
         log.exception("LLM failed for conversation_id=%s: %s", conversation.id, e)
@@ -214,6 +231,88 @@ async def _services_block(session: AsyncSession, master_id: int) -> str | None:
     return "\n".join(lines)
 
 
+async def _schedule_text(session: AsyncSession, master_id: int) -> str | None:
+    """Render the master's weekly schedule + breaks + active time-offs as a
+    compact human-readable block we can drop into the LLM system prompt.
+    """
+    weekdays_ru = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    schedules = (
+        (
+            await session.execute(
+                select(Schedule)
+                .where(Schedule.master_id == master_id)
+                .order_by(Schedule.weekday)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    breaks = (
+        (
+            await session.execute(
+                select(ScheduleBreak)
+                .where(ScheduleBreak.master_id == master_id)
+                .order_by(ScheduleBreak.weekday)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    today = datetime.now(UTC).date()
+    offs = (
+        (
+            await session.execute(
+                select(TimeOff)
+                .where(TimeOff.master_id == master_id, TimeOff.date_to >= today)
+                .order_by(TimeOff.date_from)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    if not schedules and not breaks:
+        return None
+
+    by_day: dict[int, list[str]] = {}
+    for s in schedules:
+        if not s.is_working:
+            by_day.setdefault(s.weekday, []).append("выходной")
+            continue
+        by_day.setdefault(s.weekday, []).append(
+            f"{s.start_time.strftime('%H:%M')}–{s.end_time.strftime('%H:%M')}"
+        )
+    break_by_day: dict[int, list[str]] = {}
+    for b in breaks:
+        break_by_day.setdefault(b.weekday, []).append(
+            f"{b.start_time.strftime('%H:%M')}–{b.end_time.strftime('%H:%M')}"
+        )
+
+    lines: list[str] = []
+    for wd in range(7):
+        windows = by_day.get(wd)
+        if not windows:
+            lines.append(f"- {weekdays_ru[wd]}: выходной")
+            continue
+        suffix = ""
+        if wd in break_by_day:
+            suffix = f" (перерыв {', '.join(break_by_day[wd])})"
+        lines.append(f"- {weekdays_ru[wd]}: {', '.join(windows)}{suffix}")
+
+    if offs:
+        lines.append("Ближайшие отпуска:")
+        for o in offs[:5]:
+            r = f" ({o.reason})" if o.reason else ""
+            if o.date_from == o.date_to:
+                lines.append(f"- {o.date_from.strftime('%d.%m')}{r}")
+            else:
+                lines.append(
+                    f"- {o.date_from.strftime('%d.%m')}–{o.date_to.strftime('%d.%m')}{r}"
+                )
+
+    return "\n".join(lines)
+
+
 async def _return_context(
     session: AsyncSession, *, master_id: int, client_id: int
 ) -> dict | None:
@@ -257,7 +356,7 @@ async def _dispatch_actions(
         kind = action.get("type")
         try:
             if kind == "create_booking":
-                booking = await _action_create_booking(
+                booking, fail_reason = await _action_create_booking(
                     session,
                     master=master,
                     conversation=conversation,
@@ -268,6 +367,8 @@ async def _dispatch_actions(
                     meta["booking_id"] = booking.id
                 else:
                     meta["booking_skipped"] = True
+                    if fail_reason:
+                        meta["booking_failed_reason"] = fail_reason
             elif kind == "send_portfolio":
                 meta["portfolio_request"] = True
             elif kind == "send_location":
@@ -292,21 +393,26 @@ async def _action_create_booking(
     conversation: Conversation,
     action: dict[str, Any],
     collected: dict[str, Any],
-):
+) -> tuple[Any, str | None]:
+    """Try to create a booking from an LLM action.
+
+    Returns (booking, None) on success or (None, reason) on failure. The
+    `reason` is a short Russian phrase suitable for use in a chat reply.
+    """
     starts_at_raw = action.get("starts_at")
     if not starts_at_raw:
-        return None
+        return None, "не указано время"
     try:
         starts_at = datetime.fromisoformat(str(starts_at_raw))
     except ValueError:
         log.warning("create_booking: invalid starts_at=%r", starts_at_raw)
-        return None
+        return None, "не удалось распознать время"
     if starts_at.tzinfo is None:
         log.warning("create_booking: missing tz on starts_at=%r", starts_at_raw)
-        return None
+        return None, "не указан часовой пояс"
     if starts_at <= datetime.now(UTC):
         log.warning("create_booking: starts_at in the past (%s)", starts_at.isoformat())
-        return None
+        return None, "это время уже прошло"
 
     service_id = action.get("service_id")
     svc: Service | None = None
@@ -324,11 +430,11 @@ async def _action_create_booking(
             )
         ).scalar_one_or_none()
     if svc is None:
-        return None
+        return None, "ни одной активной услуги в списке"
 
     client = await session.get(Client, conversation.client_id)
     if client is None:
-        return None
+        return None, "не удалось найти клиента"
     name = action.get("client_name") or collected.get("name")
     phone = action.get("client_phone") or collected.get("phone")
     if not client.name and isinstance(name, str):
@@ -337,7 +443,7 @@ async def _action_create_booking(
         client.phone = phone
 
     try:
-        return await create_booking(
+        booking = await create_booking(
             session,
             master=master,
             client=client,
@@ -345,9 +451,23 @@ async def _action_create_booking(
             starts_at=starts_at,
             source="bot",
         )
+        return booking, None
     except BookingError as e:
         log.warning("create_booking rejected: %s", e)
-        return None
+        msg = str(e).lower()
+        if "non-working" in msg:
+            reason = "это нерабочий день"
+        elif "outside" in msg or "working hours" in msg:
+            reason = "это время вне моих рабочих часов"
+        elif "break" in msg:
+            reason = "в это время у меня перерыв"
+        elif "time-off" in msg:
+            reason = "у меня в этот день отпуск"
+        elif "collide" in msg or "collision" in msg:
+            reason = "на это время уже есть запись"
+        else:
+            reason = "оно недоступно для записи"
+        return None, reason
 
 
 # ----------------------------------------------------------- history loader

@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from redis.asyncio import Redis
 from sqlalchemy import and_, or_, select
@@ -20,7 +21,10 @@ from app.models import (
     Client,
     Master,
     ReturnCampaign,
+    Schedule,
+    ScheduleBreak,
     Service,
+    TimeOff,
 )
 from app.services.booking import release_slot_lock
 from app.services.reminders import schedule_booking_reminders
@@ -50,6 +54,14 @@ async def create_booking(
 
     starts_at = starts_at.astimezone(UTC)
     ends_at = starts_at + timedelta(minutes=service.duration_minutes)
+
+    # Honour the master's working hours / breaks / time-offs before anything
+    # else. The bot ought to know about the schedule and not propose impossible
+    # times, but if it does we reject server-side rather than book a slot the
+    # master will have to manually decline.
+    await _validate_within_schedule(
+        session, master=master, starts_at=starts_at, ends_at=ends_at
+    )
 
     # Hard collision check inside DB to defeat any race the Redis lock missed.
     existing = (
@@ -133,3 +145,113 @@ async def create_booking(
             log.exception("failed to release slot lock for booking %s", booking.id)
 
     return booking
+
+
+# ---------------------------------------------------------------- schedule check
+
+
+async def _validate_within_schedule(
+    session: AsyncSession,
+    *,
+    master: Master,
+    starts_at: datetime,
+    ends_at: datetime,
+) -> None:
+    """Reject the booking if it falls outside the master's working window,
+    inside a recurring break (not skipped that day), or in a time-off range.
+    """
+    try:
+        tz = ZoneInfo(master.timezone)
+    except Exception:
+        tz = ZoneInfo("Europe/Moscow")
+
+    starts_local = starts_at.astimezone(tz)
+    ends_local = ends_at.astimezone(tz)
+    weekday = starts_local.weekday()  # Mon=0
+    iso = starts_local.date().isoformat()
+
+    # 1. Time-off (vacation) range covering this date.
+    offs = (
+        (
+            await session.execute(
+                select(TimeOff).where(
+                    TimeOff.master_id == master.id,
+                    TimeOff.date_from <= starts_local.date(),
+                    TimeOff.date_to >= starts_local.date(),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if offs:
+        reason = offs[0].reason or "отпуск"
+        raise BookingError(f"this date is marked as time-off ({reason})")
+
+    # 2. Working day + window check.
+    schedules = (
+        (
+            await session.execute(
+                select(Schedule).where(
+                    Schedule.master_id == master.id,
+                    Schedule.weekday == weekday,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    working = [s for s in schedules if s.is_working]
+    if not working:
+        raise BookingError("master is not working on this weekday")
+
+    fits = False
+    for s in working:
+        win_start = starts_local.replace(
+            hour=s.start_time.hour,
+            minute=s.start_time.minute,
+            second=0,
+            microsecond=0,
+        )
+        win_end = starts_local.replace(
+            hour=s.end_time.hour,
+            minute=s.end_time.minute,
+            second=0,
+            microsecond=0,
+        )
+        if starts_local >= win_start and ends_local <= win_end:
+            fits = True
+            break
+    if not fits:
+        raise BookingError("slot is outside master's working hours")
+
+    # 3. Recurring break overlap (skip dates honoured).
+    breaks = (
+        (
+            await session.execute(
+                select(ScheduleBreak).where(
+                    ScheduleBreak.master_id == master.id,
+                    ScheduleBreak.weekday == weekday,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for b in breaks:
+        if iso in (b.skip_dates or []):
+            continue
+        br_start = starts_local.replace(
+            hour=b.start_time.hour,
+            minute=b.start_time.minute,
+            second=0,
+            microsecond=0,
+        )
+        br_end = starts_local.replace(
+            hour=b.end_time.hour,
+            minute=b.end_time.minute,
+            second=0,
+            microsecond=0,
+        )
+        if starts_local < br_end and ends_local > br_start:
+            raise BookingError("slot overlaps a scheduled break")

@@ -38,6 +38,23 @@ BASE = """Ты — личный ассистент мастера {master_name} 
 цены, ни услуги, ни процедуры, которых нет в списке. Если клиент спрашивает \
 то, чего ты не знаешь — поставь escalate=true и ответ типа «уточню у мастера \
 и отвечу через минуту».
+
+ЖЁСТКОЕ ПРАВИЛО ПО УСЛУГАМ:
+- Ты НИКОГДА не предлагаешь услуги/процедуры/специалистов, которых нет в \
+списке услуг ниже. Категорически нельзя «порекомендовать массажистов», \
+«посоветовать колориста» или направить к другим мастерам — даже если очень \
+просят.
+- Если клиентка просит услугу, которой у тебя нет: вежливо извинись и \
+перечисли 1-2 близкие услуги ИЗ СПИСКА, или ответь «такую процедуру я не \
+делаю» и предложи записаться на то, что есть. Не направляй к третьим лицам.
+
+ЖЁСТКОЕ ПРАВИЛО ПО ВРЕМЕНИ ЗАПИСИ:
+- Перед create_booking ОБЯЗАТЕЛЬНО проверь блок «Расписание мастера» ниже.
+- Не записывай в нерабочий день (выходной, отпуск).
+- Не записывай вне рабочих часов.
+- Не записывай во время перерыва.
+- Если клиент назвал такое время — извинись и предложи ближайший рабочий \
+слот из расписания.
 """
 
 SCHEMA = """ФОРМАТ ОТВЕТА:
@@ -83,6 +100,12 @@ def _services_block(services_text: str | None) -> str:
     return "\nУслуги мастера:\n" + services_text.strip()
 
 
+def _schedule_block(schedule_text: str | None) -> str:
+    if not schedule_text:
+        return ""
+    return "\nРасписание мастера (использовать ТОЛЬКО эти окна для записи):\n" + schedule_text.strip()
+
+
 def _kb_block(kb_short_lines: list[str] | None) -> str:
     if not kb_short_lines:
         return ""
@@ -119,6 +142,7 @@ def build_bot_prompt(
     services_text: str | None,
     kb_short_lines: list[str] | None,
     return_context: dict | None,
+    schedule_text: str | None = None,
 ) -> str:
     parts: list[str] = [
         BASE.format(
@@ -129,6 +153,7 @@ def build_bot_prompt(
         format_block(message_format),
         _now_block(timezone),
         _services_block(services_text),
+        _schedule_block(schedule_text),
         _kb_block(kb_short_lines),
         _return_block(return_context),
         FEW_SHOT_EXAMPLES,
