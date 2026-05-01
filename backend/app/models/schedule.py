@@ -1,6 +1,7 @@
 from datetime import date, time
 
 from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Time
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, IdMixin
@@ -27,6 +28,8 @@ class ScheduleBreak(IdMixin, Base):
     weekday: Mapped[int] = mapped_column(Integer, nullable=False)
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    # YYYY-MM-DD strings on which this recurring break should be skipped.
+    skip_dates: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
 
 
 class TimeOff(IdMixin, Base):

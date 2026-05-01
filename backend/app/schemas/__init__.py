@@ -5,6 +5,7 @@ from app.schemas.master import MasterRead, MasterUpdate
 from app.schemas.return_campaign import ReturnCampaignRead
 from app.schemas.return_settings import ReturnSettingsRead, ReturnSettingsUpdate
 from app.schemas.schedule import (
+    BreakSkipRequest,
     ScheduleBreakEntry,
     ScheduleBreakRead,
     ScheduleBundle,
@@ -29,6 +30,7 @@ __all__ = [
     "BookingUpdate",
     "BotSettingsRead",
     "BotSettingsUpdate",
+    "BreakSkipRequest",
     "CategoryReorderRequest",
     "KnowledgeItemCreate",
     "KnowledgeItemRead",

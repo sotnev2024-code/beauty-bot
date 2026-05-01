@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.api.deps import CurrentMaster, SessionDep
 from app.models import Schedule, ScheduleBreak, TimeOff
 from app.schemas import (
+    BreakSkipRequest,
     ScheduleBreakEntry,
     ScheduleBreakRead,
     ScheduleBundle,
@@ -82,6 +83,35 @@ async def add_break(
 ) -> ScheduleBreakRead:
     row = ScheduleBreak(master_id=master.id, **payload.model_dump())
     session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return ScheduleBreakRead.model_validate(row)
+
+
+@router.post("/breaks/{break_id}/skip", response_model=ScheduleBreakRead)
+async def toggle_break_skip(
+    break_id: int,
+    payload: BreakSkipRequest,
+    master: CurrentMaster,
+    session: SessionDep,
+) -> ScheduleBreakRead:
+    """Toggle a YYYY-MM-DD entry in the break's skip_dates array."""
+    row = (
+        await session.execute(
+            select(ScheduleBreak).where(
+                ScheduleBreak.id == break_id, ScheduleBreak.master_id == master.id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="break not found")
+    iso = payload.date.isoformat()
+    skips = list(row.skip_dates or [])
+    if iso in skips:
+        skips.remove(iso)
+    else:
+        skips.append(iso)
+    row.skip_dates = sorted(set(skips))
     await session.commit()
     await session.refresh(row)
     return ScheduleBreakRead.model_validate(row)

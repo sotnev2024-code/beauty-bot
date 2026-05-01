@@ -79,6 +79,10 @@ export const Schedule = {
     api.post<ScheduleBreak>('/schedule/breaks', payload).then((r) => r.data),
   removeBreak: (id: number) =>
     api.delete(`/schedule/breaks/${id}`).then(() => undefined),
+  toggleBreakSkip: (id: number, isoDate: string) =>
+    api
+      .post<ScheduleBreak>(`/schedule/breaks/${id}/skip`, { date: isoDate })
+      .then((r) => r.data),
   addTimeOff: (payload: { date_from: string; date_to: string; reason?: string }) =>
     api.post<TimeOff>('/schedule/time-offs', payload).then((r) => r.data),
   removeTimeOff: (id: number) =>
@@ -95,10 +99,13 @@ export const Bookings = {
     api.get<BookingDetail[]>('/bookings', { params }).then((r) => r.data),
   create: (payload: {
     service_id: number;
-    client_telegram_id: number;
+    starts_at: string;
+    // Pick exactly one of: client_id (existing), client_telegram_id (find/create
+    // by tg id), or just name+phone for a manual entry.
+    client_id?: number;
+    client_telegram_id?: number;
     client_name?: string;
     client_phone?: string;
-    starts_at: string;
   }) => api.post<BookingDetail>('/bookings', payload).then((r) => r.data),
   reschedule: (id: number, starts_at: string) =>
     api.patch<BookingDetail>(`/bookings/${id}`, { starts_at }).then((r) => r.data),

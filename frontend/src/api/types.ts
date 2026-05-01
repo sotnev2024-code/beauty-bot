@@ -260,6 +260,7 @@ export interface ScheduleBreak {
   weekday: number;
   start_time: string;
   end_time: string;
+  skip_dates: string[];
 }
 
 export interface TimeOff {

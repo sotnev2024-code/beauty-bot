@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import time as time_mod
 from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentMaster, SessionDep
 from app.core.redis import get_redis
@@ -12,6 +14,76 @@ from app.schemas import BookingCreate, BookingDetail, BookingRead, BookingUpdate
 from app.services import BookingError, create_booking, push_master_about_booking
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
+
+
+async def _resolve_client(
+    session: AsyncSession,
+    *,
+    master_id: int,
+    client_id: int | None,
+    telegram_id: int | None,
+    name: str | None,
+    phone: str | None,
+) -> Client:
+    """Pick or create a Client for a booking based on which fields the master
+    supplied. Order of preference: explicit client_id → telegram_id → manual.
+    """
+    if client_id is not None:
+        client = await session.get(Client, client_id)
+        if client is None or client.master_id != master_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="client not found"
+            )
+        if name and not client.name:
+            client.name = name
+        if phone and not client.phone:
+            client.phone = phone
+        return client
+
+    if telegram_id is not None:
+        existing = (
+            await session.execute(
+                select(Client).where(
+                    Client.master_id == master_id,
+                    Client.telegram_id == telegram_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            if name and not existing.name:
+                existing.name = name
+            if phone and not existing.phone:
+                existing.phone = phone
+            return existing
+        client = Client(
+            master_id=master_id,
+            telegram_id=telegram_id,
+            name=name,
+            phone=phone,
+        )
+        session.add(client)
+        await session.flush()
+        return client
+
+    # Manual entry — at least name or phone is required.
+    if not (name or phone):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="provide client_id, client_telegram_id or client_name/phone",
+        )
+    # Synthetic negative telegram_id keeps the NOT-NULL UNIQUE constraint happy
+    # without colliding with real Telegram IDs (always positive).
+    synth_id = -int(time_mod.time() * 1000)
+    client = Client(
+        master_id=master_id,
+        telegram_id=synth_id,
+        name=name,
+        phone=phone,
+        source="manual",
+    )
+    session.add(client)
+    await session.flush()
+    return client
 
 
 @router.post("", response_model=BookingRead, status_code=status.HTTP_201_CREATED)
@@ -28,28 +100,14 @@ async def create_booking_endpoint(
     if svc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="service not found")
 
-    client = (
-        await session.execute(
-            select(Client).where(
-                Client.master_id == master.id,
-                Client.telegram_id == payload.client_telegram_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if client is None:
-        client = Client(
-            master_id=master.id,
-            telegram_id=payload.client_telegram_id,
-            name=payload.client_name,
-            phone=payload.client_phone,
-        )
-        session.add(client)
-        await session.flush()
-    else:
-        if payload.client_name and not client.name:
-            client.name = payload.client_name
-        if payload.client_phone and not client.phone:
-            client.phone = payload.client_phone
+    client = await _resolve_client(
+        session,
+        master_id=master.id,
+        client_id=payload.client_id,
+        telegram_id=payload.client_telegram_id,
+        name=payload.client_name,
+        phone=payload.client_phone,
+    )
 
     redis = get_redis()
     try:

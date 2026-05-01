@@ -7,8 +7,16 @@ from app.models.enums import BookingStatus
 
 
 class BookingCreate(BaseModel):
+    """Create a booking by:
+    - existing client (`client_id`), OR
+    - by telegram_id (`client_telegram_id`, find-or-create), OR
+    - manual entry (`client_name` + `client_phone`) — server synthesizes a
+      negative telegram_id for the new Client row.
+    """
+
     service_id: int = Field(gt=0)
-    client_telegram_id: int
+    client_id: int | None = None
+    client_telegram_id: int | None = None
     client_name: str | None = None
     client_phone: str | None = None
     starts_at: datetime

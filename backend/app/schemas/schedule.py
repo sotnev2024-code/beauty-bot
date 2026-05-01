@@ -36,6 +36,13 @@ class ScheduleBreakEntry(BaseModel):
 class ScheduleBreakRead(ScheduleBreakEntry):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    skip_dates: list[str] = Field(default_factory=list)
+
+
+class BreakSkipRequest(BaseModel):
+    """Toggle a YYYY-MM-DD date in the break's skip_dates array."""
+
+    date: date
 
 
 class TimeOffEntry(BaseModel):
