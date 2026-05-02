@@ -364,12 +364,15 @@ async def _kb_short_lines(session: AsyncSession, master_id: int) -> list[str]:
 
 
 async def _services_block(session: AsyncSession, master_id: int) -> str | None:
+    from sqlalchemy.orm import selectinload
+
     rows = (
         (
             await session.execute(
                 select(Service)
                 .where(Service.master_id == master_id, Service.is_active.is_(True))
                 .order_by(Service.id)
+                .options(selectinload(Service.addons))
             )
         )
         .scalars()
@@ -401,6 +404,14 @@ async def _services_block(session: AsyncSession, master_id: int) -> str | None:
         lines.append(
             f"- id={s.id}: {s.name}{cat_part}, {s.duration_minutes} мин, {s.price} ₽{desc_part}"
         )
+        addons = sorted(s.addons or [], key=lambda a: (a.position, a.id))
+        for a in addons:
+            dur = f"{a.duration_delta:+d} мин" if a.duration_delta else "0 мин"
+            price = f"{a.price_delta:+} ₽" if a.price_delta else "0 ₽"
+            default_mark = " [по умолчанию]" if a.is_default else ""
+            lines.append(
+                f"    + addon id={a.id}: {a.name} ({dur}, {price}){default_mark}"
+            )
     return "\n".join(lines)
 
 
@@ -674,6 +685,9 @@ async def _action_create_booking(
     if not client.phone and isinstance(phone, str):
         client.phone = phone
 
+    addon_ids_raw = action.get("addon_ids") or []
+    addon_ids = [int(x) for x in addon_ids_raw if isinstance(x, (int, str)) and str(x).isdigit()]
+
     try:
         booking = await create_booking(
             session,
@@ -682,6 +696,7 @@ async def _action_create_booking(
             service=svc,
             starts_at=starts_at,
             source="bot",
+            addon_ids=addon_ids,
         )
         return booking, None
     except BookingError as e:

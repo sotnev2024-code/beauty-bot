@@ -8,6 +8,7 @@ from app.models.base import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.master import Master
+    from app.models.service_addon import ServiceAddon
 
 
 class Service(IdMixin, TimestampMixin, Base):
@@ -28,3 +29,6 @@ class Service(IdMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     master: Mapped["Master"] = relationship(back_populates="services")
+    addons: Mapped[list["ServiceAddon"]] = relationship(
+        cascade="all, delete-orphan"
+    )

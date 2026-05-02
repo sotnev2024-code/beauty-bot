@@ -24,6 +24,7 @@ from app.models import (
     Schedule,
     ScheduleBreak,
     Service,
+    ServiceAddon,
     TimeOff,
 )
 from app.services.booking import release_slot_lock
@@ -46,14 +47,39 @@ async def create_booking(
     redis: Redis | None = None,
     source: str | None = None,
     lock_holder: str | None = None,
+    addon_ids: list[int] | None = None,
 ) -> Booking:
     if service.master_id != master.id:
         raise BookingError("service does not belong to master")
     if client.master_id != master.id:
         raise BookingError("client does not belong to master")
 
+    # Resolve add-ons (must belong to this service) and accumulate deltas.
+    extra_minutes = 0
+    extra_price = Decimal("0")
+    valid_addon_ids: list[int] = []
+    if addon_ids:
+        rows = (
+            (
+                await session.execute(
+                    select(ServiceAddon).where(
+                        ServiceAddon.service_id == service.id,
+                        ServiceAddon.id.in_(addon_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for a in rows:
+            extra_minutes += int(a.duration_delta or 0)
+            extra_price += Decimal(a.price_delta or 0)
+            valid_addon_ids.append(a.id)
+
     starts_at = starts_at.astimezone(UTC)
-    ends_at = starts_at + timedelta(minutes=service.duration_minutes)
+    ends_at = starts_at + timedelta(
+        minutes=service.duration_minutes + max(0, extra_minutes)
+    )
 
     # Honour the master's working hours / breaks / time-offs before anything
     # else. The bot ought to know about the schedule and not propose impossible
@@ -101,14 +127,16 @@ async def create_booking(
     base_price = service.price
     discount_applied = False
     discount_percent: int | None = None
-    final_price = base_price
+    final_price: Decimal | None = (Decimal(base_price) if base_price is not None else None)
+    if final_price is not None:
+        final_price = (final_price + extra_price).quantize(Decimal("0.01"))
 
     if campaign is not None:
         discount_applied = True
         discount_percent = int(campaign.discount_percent)
-        if base_price is not None:
+        if final_price is not None:
             final_price = (
-                Decimal(base_price)
+                final_price
                 * (Decimal(100) - Decimal(discount_percent))
                 / Decimal(100)
             ).quantize(Decimal("0.01"))
@@ -125,6 +153,7 @@ async def create_booking(
         discount_applied=discount_applied,
         discount_percent=discount_percent,
         return_campaign_id=campaign.id if campaign else None,
+        addon_ids=valid_addon_ids,
     )
     session.add(booking)
     await session.flush()

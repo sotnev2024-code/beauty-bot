@@ -38,6 +38,16 @@ export interface OnboardingStatus {
   complete: boolean;
 }
 
+export interface ServiceAddon {
+  id: number;
+  service_id: number;
+  name: string;
+  duration_delta: number;
+  price_delta: string;
+  is_default: boolean;
+  position: number;
+}
+
 export interface Service {
   id: number;
   name: string;
@@ -48,6 +58,7 @@ export interface Service {
   category_id: number | null;
   reminder_after_days: number | null;
   is_active: boolean;
+  addons: ServiceAddon[];
 }
 
 export interface ServiceCreate {

@@ -15,6 +15,11 @@ from app.schemas.schedule import (
     TimeOffRead,
 )
 from app.schemas.service import ServiceCreate, ServiceRead, ServiceUpdate
+from app.schemas.service_addon import (
+    ServiceAddonCreate,
+    ServiceAddonRead,
+    ServiceAddonUpdate,
+)
 from app.schemas.service_category import (
     CategoryReorderRequest,
     ServiceCategoryCreate,
@@ -45,6 +50,9 @@ __all__ = [
     "ScheduleBundle",
     "ScheduleEntry",
     "ScheduleEntryRead",
+    "ServiceAddonCreate",
+    "ServiceAddonRead",
+    "ServiceAddonUpdate",
     "ServiceCategoryCreate",
     "ServiceCategoryRead",
     "ServiceCategoryUpdate",

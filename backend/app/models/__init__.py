@@ -24,6 +24,7 @@ from app.models.return_campaign import ReturnCampaign
 from app.models.return_settings import ReturnSettings
 from app.models.schedule import Schedule, ScheduleBreak, TimeOff
 from app.models.service import Service
+from app.models.service_addon import ServiceAddon
 from app.models.service_category import ServiceCategory
 
 __all__ = [
@@ -55,6 +56,7 @@ __all__ = [
     "ScheduleBreak",
     "Segment",
     "Service",
+    "ServiceAddon",
     "ServiceCategory",
     "TimeOff",
 ]

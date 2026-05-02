@@ -21,6 +21,7 @@ import type {
   ScheduleBreak,
   ScheduleEntry,
   Service,
+  ServiceAddon,
   ServiceCategory,
   ServiceCreate,
   SlotsResponse,
@@ -63,6 +64,37 @@ export const Services = {
   update: (id: number, payload: Partial<ServiceCreate>) =>
     api.patch<Service>(`/services/${id}`, payload).then((r) => r.data),
   remove: (id: number) => api.delete(`/services/${id}`).then(() => undefined),
+  addAddon: (
+    serviceId: number,
+    payload: {
+      name: string;
+      duration_delta?: number;
+      price_delta?: string | number;
+      is_default?: boolean;
+      position?: number;
+    },
+  ) =>
+    api
+      .post<ServiceAddon>(`/services/${serviceId}/addons`, payload)
+      .then((r) => r.data),
+  updateAddon: (
+    serviceId: number,
+    addonId: number,
+    payload: Partial<{
+      name: string;
+      duration_delta: number;
+      price_delta: string | number;
+      is_default: boolean;
+      position: number;
+    }>,
+  ) =>
+    api
+      .patch<ServiceAddon>(`/services/${serviceId}/addons/${addonId}`, payload)
+      .then((r) => r.data),
+  removeAddon: (serviceId: number, addonId: number) =>
+    api
+      .delete(`/services/${serviceId}/addons/${addonId}`)
+      .then(() => undefined),
 };
 
 export const Schedule = {

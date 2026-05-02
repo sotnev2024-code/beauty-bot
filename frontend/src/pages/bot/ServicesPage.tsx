@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { Categories, Services } from '@/api';
-import type { Service, ServiceCategory } from '@/api/types';
+import type { Service, ServiceAddon, ServiceCategory } from '@/api/types';
 import { Button, Card, Input, Sheet, Textarea } from '@/components/ui';
 
 const UNGROUPED = -1;
@@ -284,12 +284,135 @@ function ServiceForm({
       <Button full onClick={save} disabled={busy || !name}>
         Сохранить
       </Button>
+      {initial && <AddonsEditor service={initial} onChanged={onSaved} />}
       {initial && (
         <Button full variant="ghost" onClick={remove} disabled={busy}>
           Удалить
         </Button>
       )}
     </div>
+  );
+}
+
+function AddonsEditor({
+  service,
+  onChanged,
+}: {
+  service: Service;
+  onChanged: () => void;
+}) {
+  const [addons, setAddons] = useState<ServiceAddon[]>(service.addons ?? []);
+  const [busy, setBusy] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [draftDur, setDraftDur] = useState(0);
+  const [draftPrice, setDraftPrice] = useState('0');
+
+  const refresh = async () => {
+    const list = await Services.list();
+    const fresh = list.find((s) => s.id === service.id);
+    if (fresh) setAddons(fresh.addons ?? []);
+    onChanged();
+  };
+
+  const add = async () => {
+    if (!draftName.trim()) return;
+    setBusy(true);
+    try {
+      await Services.addAddon(service.id, {
+        name: draftName.trim(),
+        duration_delta: draftDur,
+        price_delta: draftPrice || '0',
+      });
+      setDraftName('');
+      setDraftDur(0);
+      setDraftPrice('0');
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (addonId: number) => {
+    setBusy(true);
+    try {
+      await Services.removeAddon(service.id, addonId);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-2">
+        <div className="text-xs uppercase tracking-wider text-mute font-semibold">
+          Дополнительные опции
+        </div>
+        <p className="text-[11px] text-mute">
+          Бот предложит выбрать одну или несколько после согласования услуги.
+          Например: «+ Покрытие гель-лак (+30 мин, +500 ₽)».
+        </p>
+
+        {addons.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {addons.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-bg/60"
+              >
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm text-ink truncate">{a.name}</span>
+                  <span className="text-[11px] text-mute">
+                    {a.duration_delta > 0 ? `+${a.duration_delta}` : a.duration_delta} мин
+                    {' · '}
+                    {Number(a.price_delta) > 0 ? `+${Math.round(Number(a.price_delta))}` : Math.round(Number(a.price_delta))} ₽
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => remove(a.id)}
+                  disabled={busy}
+                  className="text-mute text-base w-7 h-7 grid place-items-center disabled:opacity-50"
+                  aria-label="Удалить"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2 pt-2 border-t border-divider">
+          <Input
+            label="Название опции"
+            placeholder="Например, гель-лак"
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              label="+ минут"
+              type="number"
+              value={draftDur}
+              onChange={(e) => setDraftDur(Number(e.target.value))}
+            />
+            <Input
+              label="+ цена, ₽"
+              type="number"
+              value={draftPrice}
+              onChange={(e) => setDraftPrice(e.target.value)}
+            />
+          </div>
+          <Button
+            size="md"
+            onClick={add}
+            disabled={busy || !draftName.trim()}
+          >
+            + Добавить опцию
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 

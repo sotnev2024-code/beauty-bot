@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, IdMixin, TimestampMixin
@@ -39,6 +40,7 @@ class Booking(IdMixin, TimestampMixin, Base):
         ForeignKey("return_campaigns.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
     )
+    addon_ids: Mapped[list[int]] = mapped_column(JSONB, nullable=False, default=list)
 
     master: Mapped["Master"] = relationship(back_populates="bookings")
     client: Mapped["Client"] = relationship(back_populates="bookings")

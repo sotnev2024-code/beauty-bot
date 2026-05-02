@@ -37,3 +37,9 @@ class ServiceRead(BaseModel):
     category_id: int | None
     reminder_after_days: int | None
     is_active: bool
+    addons: list["ServiceAddonRead"] = []
+
+
+from app.schemas.service_addon import ServiceAddonRead  # noqa: E402
+
+ServiceRead.model_rebuild()
