@@ -67,6 +67,7 @@ async def process_client_message(
     busy_slots_text = await busy_slots_text_for_master(
         session, master.id, master_tz_name=master.timezone or "Europe/Moscow"
     )
+    known_client = await _known_client_block(session, conversation.client_id)
 
     system_prompt = build_bot_prompt(
         master_name=master.name,
@@ -79,6 +80,7 @@ async def process_client_message(
         return_context=return_context,
         schedule_text=schedule_text,
         busy_slots_text=busy_slots_text,
+        known_client_text=known_client,
     )
 
     meta: dict[str, Any]
@@ -174,6 +176,38 @@ _STANDARD_KB_TYPES: list[tuple[str, str]] = [
     ("guarantees", "Гарантии и переделки"),
     ("restrictions", "Ограничения (беременность, аллергии и т.п.)"),
 ]
+
+
+async def _known_client_block(
+    session: AsyncSession, client_id: int
+) -> str | None:
+    """Block in the system prompt that lists the bits we already know about
+    this client so the LLM stops re-asking name/phone on every booking.
+    """
+    cl = await session.get(Client, client_id)
+    if cl is None:
+        return None
+    name = (cl.name or "").strip()
+    phone = (cl.phone or "").strip()
+    if not name and not phone:
+        return None
+    parts: list[str] = []
+    if name:
+        parts.append(f"имя: {name}")
+    if phone:
+        parts.append(f"телефон: {phone}")
+    block = "Известный клиент — " + ", ".join(parts) + "."
+    if name and phone:
+        block += (
+            " У тебя уже есть оба контакта — НЕ переспрашивай ни имя, ни телефон. "
+            "Когда время согласовано, сразу зови create_booking, передавая "
+            "client_name и client_phone из этого блока."
+        )
+    elif name:
+        block += " Имя известно — НЕ спрашивай заново. Уточни только телефон."
+    elif phone:
+        block += " Телефон известен — НЕ спрашивай заново. Уточни только имя."
+    return block
 
 
 async def _kb_short_lines(session: AsyncSession, master_id: int) -> list[str]:

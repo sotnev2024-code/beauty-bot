@@ -14,6 +14,7 @@ import type {
   Master,
   MasterUpdate,
   OverviewData,
+  PortfolioPhoto,
   ReturnCampaign,
   ReturnSettings,
   ReturnSettingsUpdate,
@@ -217,6 +218,20 @@ export const BotReminders = {
   enable: () => api.post<BotSettingsType>('/bot/reminders/enable').then((r) => r.data),
   disable: () =>
     api.post<BotSettingsType>('/bot/reminders/disable').then((r) => r.data),
+};
+
+export const Portfolio = {
+  list: () => api.get<PortfolioPhoto[]>('/portfolio').then((r) => r.data),
+  upload: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api
+      .post<PortfolioPhoto>('/portfolio', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data);
+  },
+  remove: (id: number) => api.delete(`/portfolio/${id}`).then(() => undefined),
 };
 
 export const ReturnCampaigns = {

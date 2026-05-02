@@ -103,6 +103,12 @@ export function BotHubPage() {
         muted={knowledgeFilled === 0}
       />
       <HubCard
+        to="/app/bot/portfolio"
+        icon="📷"
+        title="Портфолио"
+        subtitle="Фотографии работ — бот отправляет по запросу"
+      />
+      <HubCard
         to="/app/bot/automation"
         icon="🔔"
         title="Автоматизация"

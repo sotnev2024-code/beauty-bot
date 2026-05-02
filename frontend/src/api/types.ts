@@ -328,6 +328,13 @@ export interface RoiData {
   roi_x: string | null;
 }
 
+export interface PortfolioPhoto {
+  id: number;
+  filename: string;
+  public_url: string;
+  created_at: string;
+}
+
 export interface CheckoutResponse {
   payment_id: number;
   yookassa_id: string;

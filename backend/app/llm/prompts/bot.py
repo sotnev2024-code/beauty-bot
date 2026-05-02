@@ -139,6 +139,12 @@ def _busy_slots_block(busy_slots_text: str | None) -> str:
     )
 
 
+def _known_client_block(known_client_text: str | None) -> str:
+    if not known_client_text:
+        return ""
+    return "\n" + known_client_text.strip()
+
+
 def _kb_block(kb_short_lines: list[str] | None) -> str:
     if not kb_short_lines:
         return ""
@@ -177,6 +183,7 @@ def build_bot_prompt(
     return_context: dict | None,
     schedule_text: str | None = None,
     busy_slots_text: str | None = None,
+    known_client_text: str | None = None,
 ) -> str:
     parts: list[str] = [
         BASE.format(
@@ -189,6 +196,7 @@ def build_bot_prompt(
         _services_block(services_text),
         _schedule_block(schedule_text),
         _busy_slots_block(busy_slots_text),
+        _known_client_block(known_client_text),
         _kb_block(kb_short_lines),
         _return_block(return_context),
         FEW_SHOT_EXAMPLES,

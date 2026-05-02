@@ -26,6 +26,7 @@ import {
   BotGreetingPage,
   BotHubPage,
   BotKnowledgePage,
+  BotPortfolioPage,
   BotServicesPage,
   BotTestPage,
   BotTimezonePage,
@@ -159,6 +160,7 @@ export default function App() {
                 <Route path="/app/bot/format" element={<BotFormatPage />} />
                 <Route path="/app/bot/services" element={<BotServicesPage />} />
                 <Route path="/app/bot/knowledge" element={<BotKnowledgePage />} />
+                <Route path="/app/bot/portfolio" element={<BotPortfolioPage />} />
                 <Route path="/app/bot/automation" element={<BotAutomationPage />} />
                 <Route path="/app/bot/timezone" element={<BotTimezonePage />} />
                 <Route path="/app/bot/test" element={<BotTestPage />} />

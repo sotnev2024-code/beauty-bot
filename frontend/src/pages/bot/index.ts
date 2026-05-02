@@ -4,6 +4,7 @@ export { BotVoicePage } from './VoicePage';
 export { BotFormatPage } from './FormatPage';
 export { BotServicesPage } from './ServicesPage';
 export { BotKnowledgePage } from './KnowledgePage';
+export { BotPortfolioPage } from './PortfolioPage';
 export { BotAutomationPage } from './AutomationPage';
 export { BotTimezonePage } from './TimezonePage';
 export { BotTestPage } from './TestPage';
