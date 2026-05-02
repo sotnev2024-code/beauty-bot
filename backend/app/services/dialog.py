@@ -44,6 +44,20 @@ log = logging.getLogger(__name__)
 
 FALLBACK_REPLY = "Секунду, уточняю детали и напишу через минуту."
 
+import re
+
+_CONFIRMATION_PATTERN = re.compile(
+    r"\b(записал[ао]?|записан[ао]?|подтвержд(аю|ила|ил)|жду\s+вас|"
+    r"забронир(овал[ао]?|ован[ао]?))\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_booking_confirmation(text: str | None) -> bool:
+    if not text:
+        return False
+    return bool(_CONFIRMATION_PATTERN.search(text))
+
 
 async def process_client_message(
     session: AsyncSession,
@@ -104,6 +118,7 @@ async def process_client_message(
             "escalate": result.escalate,
             "collected_data": result.collected_data,
             "actions": actions,
+            "buttons": result.buttons,
         }
 
         # Dispatch declared actions. Each action runs against the same session
@@ -128,6 +143,23 @@ async def process_client_message(
                 "Извините, выбранное время не получится — "
                 + reason
                 + ". Подберу другое время и предложу варианты."
+            )
+
+        # Defence-in-depth: the LLM sometimes phrases a confirmation
+        # («Записал вас, ...») without actually emitting create_booking,
+        # so the booking would never land in the DB. If the reply CLAIMS
+        # a booking but no create_booking action ran, override.
+        elif _looks_like_booking_confirmation(reply_text) and not meta.get("booking_id"):
+            log.warning(
+                "LLM claimed booking but no create_booking action fired; "
+                "conversation_id=%s reply=%r",
+                conversation.id,
+                reply_text[:200] if reply_text else None,
+            )
+            meta["fake_confirm"] = True
+            reply_text = (
+                "Минуту — фиксирую детали. Подскажите ещё раз: какая услуга и "
+                "точное время? Запишу как только подтвердите."
             )
     except LLMServiceError as e:
         log.exception("LLM failed for conversation_id=%s: %s", conversation.id, e)

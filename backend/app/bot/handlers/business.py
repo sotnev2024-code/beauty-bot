@@ -18,7 +18,13 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from aiogram import Router
-from aiogram.types import BusinessConnection, Message
+from aiogram.types import (
+    BusinessConnection,
+    KeyboardButton,
+    Message,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -157,16 +163,19 @@ async def on_business_message(message: Message) -> None:
             )
             await session.commit()
             try:
+                meta = out_msg.llm_meta or {}
+                buttons = meta.get("buttons") or []
+                reply_markup = _build_reply_keyboard(buttons)
                 await get_bot().send_message(
                     chat_id=message.chat.id,
                     text=out_msg.text or "",
                     business_connection_id=message.business_connection_id,
+                    reply_markup=reply_markup,
                 )
             except Exception:
                 log.exception("business_message: failed to deliver bot reply")
 
             # Send portfolio if the LLM flagged the request.
-            meta = out_msg.llm_meta or {}
             if meta.get("portfolio_request"):
                 from app.services.portfolio import send_portfolio_photos
 
@@ -189,6 +198,43 @@ async def on_business_message(message: Message) -> None:
         client_tg_id,
         direction,
         conversation.takeover_until,
+    )
+
+
+def _build_reply_keyboard(
+    buttons: list[str] | None,
+) -> ReplyKeyboardMarkup | ReplyKeyboardRemove:
+    """Render LLM-suggested choice buttons as a one-time reply keyboard.
+
+    Returns ReplyKeyboardRemove when there are no buttons so the previous
+    suggestion (if any) gets cleared on the client side.
+    """
+    if not buttons:
+        return ReplyKeyboardRemove()
+    rows: list[list[KeyboardButton]] = []
+    # Stack 1-2 short labels per row depending on length, max 6 buttons total.
+    bucket: list[KeyboardButton] = []
+    for label in buttons[:6]:
+        text = (label or "").strip()
+        if not text:
+            continue
+        bucket.append(KeyboardButton(text=text))
+        # Two short ones per row, otherwise single-column.
+        if len(bucket) == 2 and all(len(b.text) <= 12 for b in bucket):
+            rows.append(bucket)
+            bucket = []
+        elif len(text) > 12:
+            rows.append(bucket)
+            bucket = []
+    if bucket:
+        rows.append(bucket)
+    if not rows:
+        return ReplyKeyboardRemove()
+    return ReplyKeyboardMarkup(
+        keyboard=rows,
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        is_persistent=False,
     )
 
 
