@@ -173,6 +173,15 @@ async def create_booking(
         except Exception:
             log.exception("failed to release slot lock for booking %s", booking.id)
 
+    # Instant DM to the master so they see the new booking immediately,
+    # without waiting for the daily digest or pre-visit reminders.
+    from app.services.master_notify import notify_master_new_booking
+
+    source_label = {"bot": "бота", "miniapp": "приложение", "manual": "вручную"}.get(
+        source or "", source
+    )
+    await notify_master_new_booking(session, booking=booking, source=source_label)
+
     return booking
 
 

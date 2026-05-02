@@ -124,7 +124,136 @@ export function BotAutomationPage() {
         </div>
       </Card>
 
-      {/* Section 2: return campaign */}
+      {/* Section 2: master-side notifications (digest + pre-visit reminders) */}
+      <Card>
+        <div className="text-base font-semibold text-ink">📅 Уведомления вам</div>
+        <p className="text-xs text-mute mt-1">
+          Бот пишет вам в личные сообщения — кратко, без флуда.
+        </p>
+
+        {/* Daily digest */}
+        <div className="mt-3 pt-3 border-t border-divider">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-ink">
+                Утренний дайджест
+              </div>
+              <p className="text-xs text-mute mt-1">
+                Список записей на сегодня — каждое утро в выбранное время.
+              </p>
+            </div>
+            <Toggle
+              on={bot.master_digest_enabled}
+              disabled={busy}
+              onChange={async () => {
+                setBusy(true);
+                try {
+                  const next = await BotSettings.update({
+                    master_digest_enabled: !bot.master_digest_enabled,
+                  });
+                  setBot(next);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            />
+          </div>
+          {bot.master_digest_enabled && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs text-mute">Время отправки:</span>
+              <select
+                value={bot.master_digest_hour}
+                disabled={busy}
+                className="bg-card border border-divider rounded-lg px-2 py-1 text-sm text-ink"
+                onChange={async (e) => {
+                  setBusy(true);
+                  try {
+                    const next = await BotSettings.update({
+                      master_digest_hour: Number(e.target.value),
+                    });
+                    setBot(next);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>
+                    {String(h).padStart(2, '0')}:00
+                  </option>
+                ))}
+              </select>
+              <span className="text-[11px] text-mute">по вашему часовому поясу</span>
+            </div>
+          )}
+        </div>
+
+        {/* Pre-visit reminders */}
+        <div className="mt-3 pt-3 border-t border-divider">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-ink">
+                Напоминания перед записью
+              </div>
+              <p className="text-xs text-mute mt-1">
+                Бот предупредит вас о ближайшей записи за выбранное время.
+              </p>
+            </div>
+            <Toggle
+              on={bot.master_pre_visit_enabled}
+              disabled={busy}
+              onChange={async () => {
+                setBusy(true);
+                try {
+                  const next = await BotSettings.update({
+                    master_pre_visit_enabled: !bot.master_pre_visit_enabled,
+                  });
+                  setBot(next);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            />
+          </div>
+          {bot.master_pre_visit_enabled && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[10, 30, 60, 120].map((mins) => {
+                const active = bot.master_pre_visit_offsets.includes(mins);
+                return (
+                  <button
+                    key={mins}
+                    type="button"
+                    disabled={busy}
+                    className={`px-3 py-1 rounded-full text-xs border transition ${
+                      active
+                        ? 'bg-accent text-white border-accent'
+                        : 'bg-card text-ink border-divider'
+                    }`}
+                    onClick={async () => {
+                      const nextOffsets = active
+                        ? bot.master_pre_visit_offsets.filter((m) => m !== mins)
+                        : [...bot.master_pre_visit_offsets, mins];
+                      setBusy(true);
+                      try {
+                        const next = await BotSettings.update({
+                          master_pre_visit_offsets: nextOffsets,
+                        });
+                        setBot(next);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    за {mins < 60 ? `${mins} мин` : mins === 60 ? 'час' : `${mins / 60} ч`}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Section 3: return campaign */}
       <Card>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
