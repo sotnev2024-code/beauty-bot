@@ -36,10 +36,18 @@ class BookingRead(BaseModel):
     notes: str | None
 
 
+class BookingAddonInfo(BaseModel):
+    id: int
+    name: str
+    duration_delta: int
+    price_delta: Decimal
+
+
 class BookingDetail(BookingRead):
     client_name: str | None = None
     client_phone: str | None = None
     service_name: str | None = None
+    addons: list[BookingAddonInfo] = []
 
 
 class BookingUpdate(BaseModel):

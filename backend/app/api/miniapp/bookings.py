@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentMaster, SessionDep
 from app.core.redis import get_redis
-from app.models import Booking, BookingStatus, Client, Service
+from app.models import Booking, BookingStatus, Client, Service, ServiceAddon
 from app.schemas import BookingCreate, BookingDetail, BookingRead, BookingUpdate
+from app.schemas.booking import BookingAddonInfo
 from app.services import BookingError, create_booking, push_master_about_booking
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -182,12 +183,45 @@ async def list_bookings(
     for b in rows:
         cl = await session.get(Client, b.client_id)
         svc = await session.get(Service, b.service_id) if b.service_id else None
+        addons = await _hydrate_addons(session, list(b.addon_ids or []))
         out.append(
             BookingDetail(
                 **BookingRead.model_validate(b).model_dump(),
                 client_name=cl.name if cl else None,
                 client_phone=cl.phone if cl else None,
                 service_name=svc.name if svc else None,
+                addons=addons,
+            )
+        )
+    return out
+
+
+async def _hydrate_addons(
+    session: AsyncSession, addon_ids: list[int]
+) -> list[BookingAddonInfo]:
+    if not addon_ids:
+        return []
+    rows = (
+        (
+            await session.execute(
+                select(ServiceAddon).where(ServiceAddon.id.in_(addon_ids))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_id = {a.id: a for a in rows}
+    out: list[BookingAddonInfo] = []
+    for aid in addon_ids:
+        a = by_id.get(int(aid))
+        if a is None:
+            continue
+        out.append(
+            BookingAddonInfo(
+                id=a.id,
+                name=a.name,
+                duration_delta=int(a.duration_delta or 0),
+                price_delta=a.price_delta or 0,
             )
         )
     return out
@@ -216,11 +250,13 @@ async def update_booking(
     await session.refresh(b)
     cl = await session.get(Client, b.client_id)
     svc = await session.get(Service, b.service_id) if b.service_id else None
+    addons = await _hydrate_addons(session, list(b.addon_ids or []))
     return BookingDetail(
         **BookingRead.model_validate(b).model_dump(),
         client_name=cl.name if cl else None,
         client_phone=cl.phone if cl else None,
         service_name=svc.name if svc else None,
+        addons=addons,
     )
 
 

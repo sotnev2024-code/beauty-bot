@@ -193,6 +193,13 @@ export interface DashboardData {
   bot_enabled: boolean;
 }
 
+export interface BookingAddonInfo {
+  id: number;
+  name: string;
+  duration_delta: number;
+  price_delta: string;
+}
+
 export interface BookingDetail {
   id: number;
   service_id: number | null;
@@ -206,6 +213,7 @@ export interface BookingDetail {
   client_name: string | null;
   client_phone: string | null;
   service_name: string | null;
+  addons: BookingAddonInfo[];
 }
 
 export interface ClientListItem {

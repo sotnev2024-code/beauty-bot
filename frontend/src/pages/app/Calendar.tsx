@@ -954,6 +954,23 @@ function BookingDetailView({
               {Math.round(Number(booking.price)).toLocaleString('ru-RU')} ₽
             </span>
           )}
+          {(booking.addons ?? []).length > 0 && (
+            <div className="mt-2 pt-2 border-t border-divider flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-wider text-mute font-semibold">
+                Доп. опции
+              </span>
+              {(booking.addons ?? []).map((a) => (
+                <div key={a.id} className="flex items-center justify-between text-xs">
+                  <span className="text-ink-soft truncate">{a.name}</span>
+                  <span className="text-mute whitespace-nowrap ml-2">
+                    {a.duration_delta > 0 ? `+${a.duration_delta}` : a.duration_delta} мин
+                    {' · '}
+                    {Number(a.price_delta) > 0 ? `+${Math.round(Number(a.price_delta))}` : Math.round(Number(a.price_delta))} ₽
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </Card>
       {booking.status !== 'cancelled' && (
