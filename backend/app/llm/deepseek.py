@@ -105,8 +105,8 @@ class DeepSeekProvider(LLMProvider):
             "model": self._cfg.model,
             "messages": messages,
             "response_format": {"type": "json_object"},
-            "temperature": 0.4,
-            "max_tokens": 1024,
+            "temperature": 0.3,
+            "max_tokens": 2048,
         }
         headers = {
             "Authorization": f"Bearer {self._cfg.api_key}",
@@ -159,14 +159,31 @@ class DeepSeekProvider(LLMProvider):
             log.warning(
                 "LLM returned empty content (finish_reason=%s, usage=%s)", finish, usage
             )
-            raise LLMServiceError(
-                f"empty content (finish_reason={finish}, usage={usage})"
+            # Graceful fallback: don't 503 the client. Send a polite holding
+            # reply and escalate so the master sees something is off.
+            return LLMResult(
+                reply="Секунду, уточняю детали и вернусь с ответом.",
+                actions=[],
+                escalate=True,
+                collected_data={},
+                raw=response,
             )
 
         try:
             args = json.loads(cleaned)
         except json.JSONDecodeError as e:
             log.warning("LLM JSON parse failed; raw content (first 500 chars): %r", content[:500])
+            # Same fallback for unparseable JSON: try to wrap short prose
+            # replies into the schema instead of raising.
+            stripped = content.strip()
+            if stripped and len(stripped) <= 500:
+                return LLMResult(
+                    reply=stripped,
+                    actions=[],
+                    escalate=False,
+                    collected_data={},
+                    raw=response,
+                )
             raise LLMServiceError(f"content is not valid JSON: {e}") from e
 
         if not isinstance(args, dict):
