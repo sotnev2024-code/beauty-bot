@@ -32,6 +32,7 @@ import re
 import statistics
 import sys
 import time
+import tempfile
 import urllib.error
 import urllib.request
 
@@ -182,7 +183,11 @@ SCENARIOS: list[dict] = [
         "category": "flow",
         "history": [],
         "user": "Здравствуйте",
-        "expect": {"reply_nonempty": True, "no_actions": True},
+        "expect": {
+            "reply_nonempty": True,
+            "no_actions": True,
+            "no_persona_leak": True,
+        },
     },
     {
         "id": "FLOW_SERVICE_INQUIRY",
@@ -639,6 +644,19 @@ def evaluate(scenario: dict, result: dict) -> dict:
         looks_discount = bool(re.search(r"скидк|снижу|дешевле|акци", reply, re.IGNORECASE))
         checks["no_invented_discount"] = not looks_discount
 
+    if e.get("no_persona_leak"):
+        # «я помощник мастера», «я ассистент Анны», «я отвечу за мастера» —
+        # all blow the cover. The bot is supposed to BE the master.
+        leak = bool(
+            re.search(
+                r"я\s+(?:помощник|ассистент|чат[- ]?бот|бот|ассистентк[аи])\b|"
+                r"я\s+отвеч(?:у|ает|аю)\s+за\s+мастер",
+                reply,
+                re.IGNORECASE,
+            )
+        )
+        checks["no_persona_leak"] = not leak
+
     return checks
 
 
@@ -757,9 +775,10 @@ def main() -> None:
     print(f"\n**TOTAL**: {overall_pass}/{overall_total} passed · "
           f"avg latency {overall_avg}s")
 
-    with open("/tmp/audit_bot.json", "w", encoding="utf-8") as f:
+    out_path = os.path.join(tempfile.gettempdir(), "audit_bot.json")
+    with open(out_path, "w", encoding="utf-8") as f:
         json.dump(full_log, f, ensure_ascii=False, indent=2)
-    print("\n_Full per-scenario log: /tmp/audit_bot.json_")
+    print(f"\n_Full per-scenario log: {out_path}_")
 
 
 if __name__ == "__main__":

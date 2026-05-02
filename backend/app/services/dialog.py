@@ -114,11 +114,17 @@ async def process_client_message(
         if not actions and result.portfolio_request:
             actions.append({"type": "send_portfolio"})
 
+        # Server-side enforcement: in «text» mode never let buttons through,
+        # regardless of what the LLM emitted.
+        result_buttons = list(result.buttons or [])
+        if bot_settings.message_format == "text":
+            result_buttons = []
+
         meta = {
             "escalate": result.escalate,
             "collected_data": result.collected_data,
             "actions": actions,
-            "buttons": result.buttons,
+            "buttons": result_buttons,
         }
 
         # Dispatch declared actions. Each action runs against the same session

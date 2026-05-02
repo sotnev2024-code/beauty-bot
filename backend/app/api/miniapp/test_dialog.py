@@ -103,10 +103,16 @@ async def test_dialog(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)
         ) from e
 
+    # Honour the master's text-only setting on the server side regardless
+    # of what the LLM emits.
+    buttons = list(result.buttons or [])
+    if message_format == "text":
+        buttons = []
+
     return TestDialogResponse(
         reply=result.reply,
         actions=result.actions,
-        buttons=result.buttons,
+        buttons=buttons,
         escalate=result.escalate,
         collected_data=result.collected_data,
     )
