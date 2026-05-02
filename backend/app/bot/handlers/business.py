@@ -162,8 +162,13 @@ async def on_business_message(message: Message) -> None:
                 llm=get_llm(),
             )
             await session.commit()
+            meta = out_msg.llm_meta or {}
+            # The dialog layer may flag a reply as silent (billing inactive,
+            # nothing to say). Persist for analytics but don't ping the
+            # client.
+            if meta.get("silent"):
+                return
             try:
-                meta = out_msg.llm_meta or {}
                 buttons = meta.get("buttons") or []
                 reply_markup = _build_reply_keyboard(buttons)
                 await get_bot().send_message(
@@ -314,6 +319,8 @@ async def _get_or_create_master(
     telegram_id: int,
     telegram_username: str | None,
 ) -> Master:
+    from app.services.billing import ensure_trial
+
     result = await session.execute(select(Master).where(Master.telegram_id == telegram_id))
     master = result.scalar_one_or_none()
     if master is None:
@@ -326,6 +333,9 @@ async def _get_or_create_master(
         await session.flush()
     elif telegram_username and master.telegram_username != telegram_username:
         master.telegram_username = telegram_username
+    # Whether brand-new or returning, make sure a trial window exists so the
+    # bot's billing gate doesn't immediately silence them.
+    ensure_trial(master)
     return master
 
 

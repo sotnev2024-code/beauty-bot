@@ -16,7 +16,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -71,6 +71,54 @@ async def process_client_message(
 
     Caller is responsible for committing the session and sending the reply.
     """
+    # Per-conversation serialization. Without this, two messages from the
+    # same client arriving close together race two LLM generations and can
+    # double-book the same slot. Transaction-scoped advisory lock auto-
+    # releases on commit/rollback.
+    locked = (
+        await session.execute(
+            text("SELECT pg_try_advisory_xact_lock(:cid)"),
+            {"cid": int(conversation.id)},
+        )
+    ).scalar()
+    if not locked:
+        log.info(
+            "process_client_message: conversation %s already in flight, skipping",
+            conversation.id,
+        )
+        out = Message(
+            conversation_id=conversation.id,
+            direction=MessageDirection.OUT,
+            text=(
+                "Секунду — отвечаю на предыдущее сообщение, "
+                "вернусь через минуту."
+            ),
+            llm_meta={"skipped_due_to_lock": True},
+        )
+        session.add(out)
+        await session.flush()
+        return out
+
+    # Billing gate: an expired master should not get free LLM-powered replies.
+    # Subscription = active trial OR paid window. expire_lapsed_subscriptions
+    # only demotes plan tier; this check is the runtime enforcement.
+    from app.services.billing import is_subscription_active  # local: avoid cycle
+
+    if not is_subscription_active(master):
+        log.info(
+            "process_client_message: master %s subscription inactive, bot silent",
+            master.id,
+        )
+        out = Message(
+            conversation_id=conversation.id,
+            direction=MessageDirection.OUT,
+            text="",
+            llm_meta={"skipped_due_to_billing": True, "silent": True},
+        )
+        session.add(out)
+        await session.flush()
+        return out
+
     history = await _load_history(session, conversation.id, limit=settings.LLM_HISTORY_MESSAGES)
     bot_settings = await _load_or_default_bot_settings(session, master.id)
 
