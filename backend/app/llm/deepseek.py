@@ -32,6 +32,10 @@ CORRECTION_HINT = (
 )
 
 
+class _EmptyContentRetry(LLMServiceError):
+    """Internal signal: LLM returned empty content; retry without json_object."""
+
+
 @dataclass(slots=True)
 class DeepSeekConfig:
     api_key: str
@@ -73,11 +77,28 @@ class DeepSeekProvider(LLMProvider):
     ) -> LLMResult:
         messages = self._build_messages(system_prompt, history, user_message)
         last_err: Exception | None = None
+        use_json_format = True
+        # 3 attempts: (1) json_object mode, (2) json_object + correction hint,
+        # (3) plain mode without response_format — DeepSeek sometimes returns
+        # empty content with json_object on long prompts.
+        max_attempts = max(3, self._cfg.json_retry_attempts + 2)
 
-        for attempt in range(self._cfg.json_retry_attempts + 1):
-            response = await self._post_with_retries(messages)
+        for attempt in range(max_attempts):
+            response = await self._post_with_retries(
+                messages, use_json_format=use_json_format
+            )
             try:
                 return self._parse_json_content(response)
+            except _EmptyContentRetry as e:
+                last_err = e
+                log.warning(
+                    "LLM empty content (attempt %s, json_mode=%s)",
+                    attempt + 1,
+                    use_json_format,
+                )
+                # On the next attempt drop response_format — that's the most
+                # common cause of empty completions on long prompts.
+                use_json_format = False
             except LLMServiceError as e:
                 last_err = e
                 log.warning("LLM JSON parse failure (attempt %s): %s", attempt + 1, e)
@@ -99,15 +120,21 @@ class DeepSeekProvider(LLMProvider):
         msgs.append({"role": "user", "content": user_message})
         return msgs
 
-    async def _post_with_retries(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    async def _post_with_retries(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        use_json_format: bool = True,
+    ) -> dict[str, Any]:
         url = f"{self._cfg.api_base.rstrip('/')}/v1/chat/completions"
-        payload = {
+        payload: dict[str, Any] = {
             "model": self._cfg.model,
             "messages": messages,
-            "response_format": {"type": "json_object"},
             "temperature": 0.3,
             "max_tokens": 2048,
         }
+        if use_json_format:
+            payload["response_format"] = {"type": "json_object"}
         headers = {
             "Authorization": f"Bearer {self._cfg.api_key}",
             "Content-Type": "application/json",
@@ -159,14 +186,11 @@ class DeepSeekProvider(LLMProvider):
             log.warning(
                 "LLM returned empty content (finish_reason=%s, usage=%s)", finish, usage
             )
-            # Graceful fallback: don't 503 the client. Send a polite holding
-            # reply and escalate so the master sees something is off.
-            return LLMResult(
-                reply="Секунду, уточняю детали и вернусь с ответом.",
-                actions=[],
-                escalate=True,
-                collected_data={},
-                raw=response,
+            # Bubble up so generate() can retry the call with response_format
+            # disabled. If even that fails generate() will surface the holding
+            # reply via the outer LLMServiceError -> dialog.py fallback.
+            raise _EmptyContentRetry(
+                f"empty content (finish_reason={finish}, usage={usage})"
             )
 
         try:
