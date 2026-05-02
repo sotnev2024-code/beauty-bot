@@ -152,14 +152,14 @@ async def _services_block(session: SessionDep, master_id: int) -> str | None:
 
 
 async def _kb_short_lines(session: SessionDep, master_id: int) -> list[str]:
+    """Inline ALL KB items so the bot can answer directly. Long items are
+    truncated to keep the prompt bounded.
+    """
     rows = (
         (
             await session.execute(
                 select(KnowledgeBaseItem)
-                .where(
-                    KnowledgeBaseItem.master_id == master_id,
-                    KnowledgeBaseItem.is_short.is_(True),
-                )
+                .where(KnowledgeBaseItem.master_id == master_id)
                 .order_by(KnowledgeBaseItem.position, KnowledgeBaseItem.id)
             )
         )
@@ -169,6 +169,8 @@ async def _kb_short_lines(session: SessionDep, master_id: int) -> list[str]:
     out: list[str] = []
     for r in rows:
         body = r.content.strip().replace("\n", " ")
+        if len(body) > 600:
+            body = body[:597] + "…"
         out.append(f"{r.title}: {body}")
         if r.geolocation_lat is not None and r.geolocation_lng is not None:
             out.append(

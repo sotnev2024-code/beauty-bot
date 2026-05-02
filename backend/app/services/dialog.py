@@ -165,15 +165,15 @@ async def _load_or_default_bot_settings(
 
 
 async def _kb_short_lines(session: AsyncSession, master_id: int) -> list[str]:
-    """Return the always-in-prompt short KB items (address, payment, ...)."""
+    """Return ALL KB items inline so the bot can answer directly without a
+    separate lookup step. Each item is rendered as «Title: content», with
+    long contents truncated to keep the prompt bounded.
+    """
     rows = (
         (
             await session.execute(
                 select(KnowledgeBaseItem)
-                .where(
-                    KnowledgeBaseItem.master_id == master_id,
-                    KnowledgeBaseItem.is_short.is_(True),
-                )
+                .where(KnowledgeBaseItem.master_id == master_id)
                 .order_by(KnowledgeBaseItem.position, KnowledgeBaseItem.id)
             )
         )
@@ -183,6 +183,8 @@ async def _kb_short_lines(session: AsyncSession, master_id: int) -> list[str]:
     out: list[str] = []
     for r in rows:
         body = r.content.strip().replace("\n", " ")
+        if len(body) > 600:
+            body = body[:597] + "…"
         out.append(f"{r.title}: {body}")
         if r.geolocation_lat is not None and r.geolocation_lng is not None:
             out.append(
