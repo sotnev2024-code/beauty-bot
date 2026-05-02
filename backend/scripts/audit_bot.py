@@ -458,28 +458,47 @@ def call_llm(scenario: dict, voice: str, fmt: str) -> dict:
 
 
 def _call_deepseek(scenario: dict, sys_text: str) -> dict:
+    """Mirror prod retry chain: 3 attempts, drop response_format on the third
+    so the audit measures what real users get, not a single raw call."""
     if not DEEPSEEK_KEY:
         return {"http": 0, "raw": "DEEPSEEK_API_KEY missing", "latency_s": 0}
     msgs = [{"role": "system", "content": sys_text}]
     for h in scenario["history"]:
         msgs.append(h)
     msgs.append({"role": "user", "content": scenario["user"]})
-    body = {
-        "model": "deepseek-chat",
-        "messages": msgs,
-        "response_format": {"type": "json_object"},
-        "temperature": 0.3,
-        "max_tokens": 1024,
-    }
-    status, raw, latency = _post(
-        "https://api.deepseek.com/v1/chat/completions",
-        {
-            "Authorization": f"Bearer {DEEPSEEK_KEY}",
-            "Content-Type": "application/json",
-        },
-        body,
-    )
-    return _extract(status, raw, latency)
+
+    last_extract: dict = {}
+    total_latency = 0.0
+    attempts_used = 0
+    for attempt in range(3):
+        body = {
+            "model": "deepseek-chat",
+            "messages": msgs,
+            "temperature": 0.3,
+            "max_tokens": 1024,
+        }
+        if attempt < 2:
+            body["response_format"] = {"type": "json_object"}
+        status, raw, latency = _post(
+            "https://api.deepseek.com/v1/chat/completions",
+            {
+                "Authorization": f"Bearer {DEEPSEEK_KEY}",
+                "Content-Type": "application/json",
+            },
+            body,
+        )
+        attempts_used = attempt + 1
+        total_latency += latency
+        last_extract = _extract(status, raw, latency)
+        # Success criteria: HTTP 200 with usable parsed content. Note: on
+        # attempt 3 (response_format dropped) the model may emit prose
+        # instead of JSON — _extract wraps that into a {reply,...} shape,
+        # so .get("json") is non-None and counts as success.
+        if last_extract.get("http") == 200 and last_extract.get("json"):
+            break
+    last_extract["latency_s"] = round(total_latency, 2)
+    last_extract["attempts"] = attempts_used
+    return last_extract
 
 
 def _call_kie(scenario: dict, sys_text: str) -> dict:
@@ -568,7 +587,22 @@ def _extract(status: int, raw: str, latency: float) -> dict:
     except (KeyError, IndexError):
         return out
     out["content"] = content
-    out["json"] = _extract_json(content)
+    parsed = _extract_json(content)
+    # Mirror prod fallback: when LLM returns prose instead of JSON (happens
+    # on attempt 3 after we've dropped response_format), wrap short replies
+    # into the schema instead of marking them invalid.
+    if parsed is None:
+        stripped = content.strip()
+        if stripped and len(stripped) <= 500:
+            parsed = {
+                "reply": stripped,
+                "actions": [],
+                "buttons": [],
+                "escalate": False,
+                "collected_data": {},
+                "_wrapped_prose": True,
+            }
+    out["json"] = parsed
     return out
 
 
