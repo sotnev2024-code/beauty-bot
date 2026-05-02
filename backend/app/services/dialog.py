@@ -164,10 +164,25 @@ async def _load_or_default_bot_settings(
     )
 
 
+_STANDARD_KB_TYPES: list[tuple[str, str]] = [
+    ("address", "Адрес и как добраться"),
+    ("payment", "Способы оплаты"),
+    ("sterilization", "Стерилизация и санитария"),
+    ("techniques", "Техники и материалы"),
+    ("preparation", "Как подготовиться к визиту"),
+    ("whats_with", "Что взять с собой"),
+    ("guarantees", "Гарантии и переделки"),
+    ("restrictions", "Ограничения (беременность, аллергии и т.п.)"),
+]
+
+
 async def _kb_short_lines(session: AsyncSession, master_id: int) -> list[str]:
-    """Return ALL KB items inline so the bot can answer directly without a
-    separate lookup step. Each item is rendered as «Title: content», with
-    long contents truncated to keep the prompt bounded.
+    """Render the KB block for the system prompt.
+
+    Filled items are inlined verbatim. Standard topics that the master has
+    NOT filled in are explicitly listed as «НЕ УКАЗАНО МАСТЕРОМ» so the
+    model can't fall back to its training data and fabricate plausible
+    answers (temperatures, brands, materials etc).
     """
     rows = (
         (
@@ -180,8 +195,11 @@ async def _kb_short_lines(session: AsyncSession, master_id: int) -> list[str]:
         .scalars()
         .all()
     )
+
     out: list[str] = []
+    filled_types: set[str] = set()
     for r in rows:
+        filled_types.add(r.type)
         body = r.content.strip().replace("\n", " ")
         if len(body) > 600:
             body = body[:597] + "…"
@@ -193,6 +211,15 @@ async def _kb_short_lines(session: AsyncSession, master_id: int) -> list[str]:
             )
         if r.yandex_maps_url:
             out.append(f"Яндекс.Карты: {r.yandex_maps_url}")
+
+    # Mark missing standard topics as explicitly unknown.
+    for kind, label in _STANDARD_KB_TYPES:
+        if kind not in filled_types:
+            out.append(
+                f"{label}: НЕ УКАЗАНО МАСТЕРОМ — на вопросы по этой теме НИКОГДА "
+                f"не отвечай конкретикой, ставь escalate=true и пиши «уточню у "
+                f"мастера и вернусь»."
+            )
     return out
 
 
