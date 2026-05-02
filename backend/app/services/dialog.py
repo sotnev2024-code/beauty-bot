@@ -148,19 +148,93 @@ async def process_client_message(
         # Defence-in-depth: the LLM sometimes phrases a confirmation
         # («Записал вас, ...») without actually emitting create_booking,
         # so the booking would never land in the DB. If the reply CLAIMS
-        # a booking but no create_booking action ran, override.
+        # a booking but no create_booking action ran, transparently retry
+        # the LLM with a corrective hint instead of asking the client to
+        # repeat themselves.
         elif _looks_like_booking_confirmation(reply_text) and not meta.get("booking_id"):
             log.warning(
-                "LLM claimed booking but no create_booking action fired; "
+                "LLM claimed booking but no create_booking action fired; retrying. "
                 "conversation_id=%s reply=%r",
                 conversation.id,
                 reply_text[:200] if reply_text else None,
             )
-            meta["fake_confirm"] = True
-            reply_text = (
-                "Минуту — фиксирую детали. Подскажите ещё раз: какая услуга и "
-                "точное время? Запишу как только подтвердите."
-            )
+            meta["fake_confirm_recovered"] = True
+            try:
+                retry_result = await llm.generate(
+                    system_prompt=system_prompt,
+                    history=[
+                        *history,
+                        LLMMessage(role="user", content=user_text),
+                        LLMMessage(role="assistant", content=reply_text or ""),
+                    ],
+                    user_message=(
+                        "(система) В предыдущем ответе ты сказал, что записал, "
+                        "но НЕ эмитил действие create_booking — запись не сохранилась. "
+                        "ОБЯЗАТЕЛЬНО на основании истории эмить ровно одно действие "
+                        "create_booking с теми параметрами (service_id, starts_at, "
+                        "client_name, client_phone), которые упоминал в тексте. "
+                        "Reply должен коротко подтвердить запись."
+                    ),
+                )
+                retry_actions = list(retry_result.actions or [])
+                if not retry_actions and retry_result.slot_intent:
+                    retry_actions.append(
+                        {"type": "create_booking", **retry_result.slot_intent}
+                    )
+                has_booking_action = any(
+                    a.get("type") == "create_booking" for a in retry_actions
+                )
+                if has_booking_action:
+                    retry_meta: dict[str, Any] = {
+                        "escalate": retry_result.escalate,
+                        "collected_data": retry_result.collected_data,
+                        "actions": retry_actions,
+                        "buttons": retry_result.buttons,
+                        "fake_confirm_recovered": True,
+                    }
+                    await _dispatch_actions(
+                        session,
+                        master=master,
+                        conversation=conversation,
+                        actions=retry_actions,
+                        collected=retry_result.collected_data,
+                        meta=retry_meta,
+                    )
+                    if retry_meta.get("booking_id"):
+                        # Recovery succeeded — use retried reply + meta.
+                        reply_text = retry_result.reply
+                        meta = retry_meta
+                    elif retry_meta.get("booking_skipped"):
+                        # Retried but slot was rejected — fall through to
+                        # the schedule apology message.
+                        reason = (
+                            retry_meta.get("booking_failed_reason")
+                            or "оно вне моего расписания"
+                        )
+                        meta = retry_meta
+                        reply_text = (
+                            "Извините, выбранное время не получится — "
+                            + reason
+                            + ". Подберу другое и предложу варианты."
+                        )
+                    else:
+                        meta["fake_confirm"] = True
+                        reply_text = (
+                            "Минуту — фиксирую детали. Подскажите ещё раз услугу "
+                            "и точное время — запишу сразу."
+                        )
+                else:
+                    meta["fake_confirm"] = True
+                    reply_text = (
+                        "Минуту — фиксирую детали. Подскажите ещё раз услугу и "
+                        "точное время — запишу сразу."
+                    )
+            except LLMServiceError:
+                meta["fake_confirm"] = True
+                reply_text = (
+                    "Минуту — фиксирую детали. Подскажите ещё раз услугу и "
+                    "точное время — запишу сразу."
+                )
     except LLMServiceError as e:
         log.exception("LLM failed for conversation_id=%s: %s", conversation.id, e)
         reply_text = FALLBACK_REPLY
