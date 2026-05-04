@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -10,6 +11,15 @@ from app.core.config import settings
 
 log = logging.getLogger(__name__)
 
+ALLOWED_UPDATES = [
+    "message",
+    "callback_query",
+    "business_connection",
+    "business_message",
+    "edited_business_message",
+    "deleted_business_messages",
+]
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -18,11 +28,18 @@ async def lifespan(_app: FastAPI):
     if settings.ENVIRONMENT != "test":
         start_scheduler()
 
+    polling_task: asyncio.Task | None = None
     webhook_ready = (
         settings.ENVIRONMENT != "test"
         and settings.TELEGRAM_BOT_TOKEN
         and settings.TELEGRAM_WEBHOOK_URL
     )
+    polling_ready = (
+        settings.ENVIRONMENT != "test"
+        and settings.TELEGRAM_BOT_TOKEN
+        and not settings.TELEGRAM_WEBHOOK_URL
+    )
+
     if webhook_ready:
         from aiogram.types import BotCommand
 
@@ -34,13 +51,7 @@ async def lifespan(_app: FastAPI):
                 url=settings.TELEGRAM_WEBHOOK_URL,
                 secret_token=settings.TELEGRAM_WEBHOOK_SECRET or None,
                 drop_pending_updates=True,
-                allowed_updates=[
-                    "message",
-                    "business_connection",
-                    "business_message",
-                    "edited_business_message",
-                    "deleted_business_messages",
-                ],
+                allowed_updates=ALLOWED_UPDATES,
             )
             await bot.set_my_commands(
                 [
@@ -51,11 +62,36 @@ async def lifespan(_app: FastAPI):
             log.info("webhook configured: %s", settings.TELEGRAM_WEBHOOK_URL)
         except Exception:
             log.exception("failed to set webhook on startup")
+    elif polling_ready:
+        # Local-dev fallback: no public URL, so we long-poll instead. Useful
+        # for testing on your laptop without a tunnel — just leave
+        # TELEGRAM_WEBHOOK_URL empty in .env.
+        from app.bot import get_bot
+        from app.bot.dispatcher import get_dispatcher
+
+        bot = get_bot()
+        dp = get_dispatcher()
+        try:
+            # If a webhook is still set on Telegram's side (e.g. from a prior
+            # deploy), polling will silently receive nothing. Clear it first.
+            await bot.delete_webhook(drop_pending_updates=True)
+        except Exception:
+            log.exception("delete_webhook before polling failed (continuing)")
+        polling_task = asyncio.create_task(
+            dp.start_polling(bot, allowed_updates=ALLOWED_UPDATES)
+        )
+        log.info("long-polling started (TELEGRAM_WEBHOOK_URL empty)")
+
     yield
+
+    if polling_task is not None:
+        polling_task.cancel()
+        try:
+            await polling_task
+        except (asyncio.CancelledError, Exception):
+            pass
     if settings.ENVIRONMENT != "test":
         shutdown_scheduler()
-    # Don't deleteWebhook on shutdown — production replicas restart frequently
-    # and we don't want updates to fall on the floor.
 
 
 app = FastAPI(
