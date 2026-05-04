@@ -17,13 +17,13 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.types import (
     BusinessConnection,
-    KeyboardButton,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     Message,
-    ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
 )
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -206,25 +206,126 @@ async def on_business_message(message: Message) -> None:
     )
 
 
+CALLBACK_PREFIX = "ch:"
+
+
+@router.callback_query(F.data.startswith(CALLBACK_PREFIX))
+async def on_choice_tap(callback: CallbackQuery) -> None:
+    """Client tapped one of the bot's inline-keyboard choice buttons.
+
+    Telegram delivers this as a regular callback_query, but if the tap
+    happened on a business message, `callback.message.business_connection_id`
+    is populated. We treat the button label as if the client typed it,
+    so the conversation thread continues naturally and the LLM sees a
+    consistent history.
+    """
+    if not callback.data:
+        await callback.answer()
+        return
+    label = callback.data[len(CALLBACK_PREFIX):]
+    msg = callback.message
+    if msg is None or msg.business_connection_id is None:
+        # Not a business chat (regular bot DM) — same code path is fine,
+        # just answer to dismiss the spinner.
+        await callback.answer()
+        return
+
+    business_connection_id = msg.business_connection_id
+    chat_id = msg.chat.id
+    client_tg_id = callback.from_user.id if callback.from_user else None
+
+    async with session_factory() as session:
+        conn_row = await _find_connection(session, business_connection_id)
+        if conn_row is None:
+            await callback.answer()
+            return
+        master_id = conn_row.master_id
+        master = await _load_master(session, master_id)
+        client = await _get_or_create_client(
+            session,
+            master_id=master_id,
+            telegram_id=client_tg_id or chat_id,
+            name=callback.from_user.first_name if callback.from_user else None,
+        )
+        conversation = await _get_or_create_conversation(
+            session, master_id=master_id, client_id=client.id
+        )
+
+        now = datetime.now(UTC)
+        client.last_seen_at = now
+        if client.first_seen_at is None:
+            client.first_seen_at = now
+        conversation.last_message_at = now
+
+        # Persist the tap as if the client typed the label — this keeps
+        # the message thread coherent and gives the LLM the same context
+        # in subsequent turns.
+        session.add(
+            MessageModel(
+                conversation_id=conversation.id,
+                direction=MessageDirectionEnum.IN,
+                text=label,
+            )
+        )
+        await session.flush()
+
+        if not (master.bot_enabled and _bot_active(conversation, now)):
+            await session.commit()
+            await callback.answer()
+            return
+
+        out_msg = await process_client_message(
+            session,
+            master=master,
+            conversation=conversation,
+            user_text=label,
+            llm=get_llm(),
+        )
+        await session.commit()
+        meta = out_msg.llm_meta or {}
+        if meta.get("silent"):
+            await callback.answer()
+            return
+        try:
+            keyboard = _build_reply_keyboard(meta.get("buttons") or [])
+            await get_bot().send_message(
+                chat_id=chat_id,
+                text=out_msg.text or "",
+                business_connection_id=business_connection_id,
+                reply_markup=keyboard,
+            )
+        except Exception:
+            log.exception("on_choice_tap: failed to deliver bot reply")
+
+    await callback.answer()
+
+
 def _build_reply_keyboard(
     buttons: list[str] | None,
-) -> ReplyKeyboardMarkup | ReplyKeyboardRemove:
-    """Render LLM-suggested choice buttons as a one-time reply keyboard.
+) -> InlineKeyboardMarkup | None:
+    """Render LLM-suggested choice buttons as an inline keyboard.
 
-    Returns ReplyKeyboardRemove when there are no buttons so the previous
-    suggestion (if any) gets cleared on the client side.
+    Inline keyboards (rather than ReplyKeyboardMarkup) because Telegram
+    Business API silently drops reply-keyboard updates on outgoing messages
+    sent by the bot on behalf of a business account — taps never reach us.
+    Inline buttons are delivered correctly and produce a callback_query.
+
+    callback_data carries the label itself (clipped to Telegram's 64-byte
+    cap so a long «Маникюр + гель-лак + дизайн» still survives).
     """
     if not buttons:
-        return ReplyKeyboardRemove()
-    rows: list[list[KeyboardButton]] = []
-    # Stack 1-2 short labels per row depending on length, max 6 buttons total.
-    bucket: list[KeyboardButton] = []
+        return None
+    rows: list[list[InlineKeyboardButton]] = []
+    bucket: list[InlineKeyboardButton] = []
     for label in buttons[:6]:
         text = (label or "").strip()
         if not text:
             continue
-        bucket.append(KeyboardButton(text=text))
-        # Two short ones per row, otherwise single-column.
+        # callback_data has a 64-byte budget. Prefix is 3 chars, leave room.
+        callback_data = (CALLBACK_PREFIX + text)[:60]
+        btn = InlineKeyboardButton(text=text, callback_data=callback_data)
+        bucket.append(btn)
+        # Two short ones per row when both fit, single-column otherwise.
         if len(bucket) == 2 and all(len(b.text) <= 12 for b in bucket):
             rows.append(bucket)
             bucket = []
@@ -234,13 +335,8 @@ def _build_reply_keyboard(
     if bucket:
         rows.append(bucket)
     if not rows:
-        return ReplyKeyboardRemove()
-    return ReplyKeyboardMarkup(
-        keyboard=rows,
-        resize_keyboard=True,
-        one_time_keyboard=True,
-        is_persistent=False,
-    )
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _bot_active(conversation: Conversation, now: datetime) -> bool:
