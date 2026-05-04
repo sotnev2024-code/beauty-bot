@@ -154,6 +154,27 @@ async def on_business_message(message: Message) -> None:
             and _bot_active(conversation, now)
         )
         if should_reply:
+            # Branch on the master's preferred message format. `buttons`
+            # mode bypasses the LLM entirely and runs a deterministic
+            # FSM-driven booking funnel; `text` and `hybrid` keep the
+            # current LLM-driven dialog with optional inline buttons.
+            from app.models import BotSettings
+
+            bs = await session.get(BotSettings, master_id)
+            if bs is not None and bs.message_format == "buttons":
+                from app.bot.handlers import business_buttons
+
+                await business_buttons.start_or_resume(
+                    session=session,
+                    master=master,
+                    conversation=conversation,
+                    business_connection_id=message.business_connection_id,
+                    chat_id=message.chat.id,
+                    text=text,
+                )
+                await session.commit()
+                return
+
             out_msg = await process_client_message(
                 session,
                 master=master,
@@ -161,24 +182,46 @@ async def on_business_message(message: Message) -> None:
                 user_text=text,
                 llm=get_llm(),
             )
-            await session.commit()
             meta = out_msg.llm_meta or {}
             # The dialog layer may flag a reply as silent (billing inactive,
             # nothing to say). Persist for analytics but don't ping the
             # client.
             if meta.get("silent"):
+                await session.commit()
                 return
             try:
-                buttons = meta.get("buttons") or []
-                reply_markup = _build_reply_keyboard(buttons)
-                await get_bot().send_message(
-                    chat_id=message.chat.id,
-                    text=out_msg.text or "",
-                    business_connection_id=message.business_connection_id,
-                    reply_markup=reply_markup,
-                )
+                # Hybrid: dialog.py may have flagged a button-widget
+                # override at a structured decision point (addon picker,
+                # time slots, confirm card). Render that instead of (or
+                # alongside) the LLM's text reply, with the button-mode
+                # keyboard so the client gets a deterministic UI. The
+                # widget render mutates conversation.flow_state to track
+                # menu_message_id, so we commit AFTER the render so the
+                # next tap can read the freshly-stored id.
+                hybrid = meta.get("hybrid")
+                if hybrid:
+                    await _render_hybrid_widget(
+                        session=session,
+                        master=master,
+                        conversation=conversation,
+                        bot=get_bot(),
+                        chat_id=message.chat.id,
+                        business_connection_id=message.business_connection_id,
+                        llm_reply=out_msg.text or "",
+                        hybrid=hybrid,
+                    )
+                else:
+                    buttons = meta.get("buttons") or []
+                    reply_markup = _build_reply_keyboard(buttons)
+                    await get_bot().send_message(
+                        chat_id=message.chat.id,
+                        text=out_msg.text or "",
+                        business_connection_id=message.business_connection_id,
+                        reply_markup=reply_markup,
+                    )
             except Exception:
                 log.exception("business_message: failed to deliver bot reply")
+            await session.commit()
 
             # Send portfolio if the LLM flagged the request.
             if meta.get("portfolio_request"):
@@ -298,6 +341,164 @@ async def on_choice_tap(callback: CallbackQuery) -> None:
             log.exception("on_choice_tap: failed to deliver bot reply")
 
     await callback.answer()
+
+
+async def _render_hybrid_widget(
+    *,
+    session,
+    master,
+    conversation,
+    bot,
+    chat_id: int,
+    business_connection_id: str,
+    llm_reply: str,
+    hybrid: dict,
+) -> None:
+    """Render a button widget (addons / time / confirm) returned by the
+    hybrid post-processor in dialog.py.
+
+    The LLM's free-text reply is sent first as a normal message (so the
+    bot can still phrase «отлично, какой день удобен?»), then a second
+    message carries the keyboard. We track the keyboard message's id
+    in flow_state so subsequent taps can strip the old keyboard before
+    sending a new one — otherwise old pickers keep stacking.
+    """
+    from app.bot.flow import keyboards as kb
+    from app.bot.flow.state import FlowState
+    from app.services.booking import find_available_slots
+    from app.models import Service, ServiceAddon
+    from datetime import date as _date
+    from sqlalchemy import select as _select
+    from zoneinfo import ZoneInfo as _ZoneInfo
+
+    widget = hybrid.get("widget")
+    state = FlowState.from_dict(conversation.flow_state)
+
+    async def _send_keyboard(text: str, keyboard) -> None:
+        """Strip the previous picker's keyboard, send a new picker,
+        remember its message_id in flow_state."""
+        prev_id = state.menu_message_id
+        if prev_id is not None:
+            try:
+                await bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=prev_id,
+                    business_connection_id=business_connection_id,
+                    reply_markup=None,
+                )
+            except Exception:
+                pass
+        sent = await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            business_connection_id=business_connection_id,
+            reply_markup=keyboard,
+        )
+        state.menu_message_id = sent.message_id
+        conversation.flow_state = state.to_dict()
+
+    if widget == "addons":
+        addons = (
+            (
+                await session.execute(
+                    _select(ServiceAddon)
+                    .where(ServiceAddon.service_id == state.service_id)
+                    .order_by(ServiceAddon.position, ServiceAddon.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if llm_reply.strip():
+            await bot.send_message(
+                chat_id=chat_id,
+                text=llm_reply,
+                business_connection_id=business_connection_id,
+            )
+        await _send_keyboard(
+            "Выберите добавки или нажмите «Без добавок»:",
+            kb.kb_addons(addons, set(state.addon_ids or [])),
+        )
+        return
+
+    if widget == "time":
+        if not state.day or not state.service_id:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=llm_reply,
+                business_connection_id=business_connection_id,
+            )
+            return
+        try:
+            tz = _ZoneInfo(master.timezone)
+        except Exception:
+            tz = _ZoneInfo("Europe/Moscow")
+        svc = await session.get(Service, state.service_id)
+        extra = 0
+        if state.addon_ids:
+            rows = (
+                (
+                    await session.execute(
+                        _select(ServiceAddon).where(
+                            ServiceAddon.id.in_(state.addon_ids)
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            extra = sum(int(r.duration_delta or 0) for r in rows)
+        day = _date.fromisoformat(state.day)
+        res = await find_available_slots(
+            session,
+            master=master,
+            service=svc,
+            from_date=day,
+            days_ahead=1,
+            extra_minutes=extra,
+        )
+        times = sorted(
+            {s.starts_at.astimezone(tz).strftime("%H:%M") for s in res.slots}
+        )
+        weekday_short = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")[day.weekday()]
+        if llm_reply.strip():
+            await bot.send_message(
+                chat_id=chat_id,
+                text=llm_reply,
+                business_connection_id=business_connection_id,
+            )
+        await _send_keyboard(
+            f"Свободные слоты на {weekday_short} {day:%d.%m}:",
+            kb.kb_time_slots(times),
+        )
+        return
+
+    if widget == "confirm":
+        from app.bot.handlers.business_buttons import _build_summary
+
+        summary = await _build_summary(
+            session=session,
+            master=master,
+            conversation=conversation,
+            state=state,
+        )
+        if llm_reply.strip() and llm_reply.strip().lower() not in (
+            "ok", "хорошо", ""
+        ):
+            await bot.send_message(
+                chat_id=chat_id,
+                text=llm_reply,
+                business_connection_id=business_connection_id,
+            )
+        await _send_keyboard(summary, kb.kb_confirm())
+        return
+
+    # Unknown widget — fall back to plain text so we don't drop the reply.
+    await bot.send_message(
+        chat_id=chat_id,
+        text=llm_reply,
+        business_connection_id=business_connection_id,
+    )
 
 
 def _build_reply_keyboard(

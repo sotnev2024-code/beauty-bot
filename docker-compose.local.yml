@@ -1,0 +1,14 @@
+services:
+  backend:
+    environment:
+      TELEGRAM_WEBHOOK_URL: ""
+      ENVIRONMENT: "development"
+      HTTP_PROXY_URL: ""
+      DEEPSEEK_PROXY_URL: ""
+      LLM_PROVIDER: "deepseek"
+      ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:8001"
+      MINI_APP_URL: "http://localhost:5173"
+      PUBLIC_API_URL: "http://localhost:8002/api"
+      PORTFOLIO_STORAGE_PATH: "/app/portfolio_local"
+    ports:
+      - "127.0.0.1:8002:8000"

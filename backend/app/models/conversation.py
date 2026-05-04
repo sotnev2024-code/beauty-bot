@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, IdMixin, TimestampMixin
@@ -25,6 +26,9 @@ class Conversation(IdMixin, TimestampMixin, Base):
     )
     takeover_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Per-conversation FSM state for the deterministic button-only funnel.
+    # NULL when the master uses LLM-driven dialog (text/hybrid formats).
+    flow_state: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     client: Mapped["Client"] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(

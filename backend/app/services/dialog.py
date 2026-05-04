@@ -13,7 +13,7 @@ The funnel concept is gone — there's no `current_step_id` lookup. Instead:
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select, text
@@ -175,6 +175,72 @@ async def process_client_message(
             "buttons": result_buttons,
         }
 
+        # In hybrid mode we intercept select transition points — service
+        # picked + addons available, find_slots emitted, or create_booking
+        # about to fire — and replace the LLM's text reply with a
+        # deterministic button widget. This keeps the dialog free-form
+        # for service/date selection but bullet-proof for the addon
+        # checklist, time pick, and final confirmation. See
+        # `_apply_hybrid_overrides` for the rules.
+        if bot_settings.message_format == "hybrid":
+            actions = await _apply_hybrid_overrides(
+                session=session,
+                master=master,
+                conversation=conversation,
+                actions=actions,
+                meta=meta,
+                collected=result.collected_data,
+            )
+            meta["actions"] = actions
+
+        # When the LLM raised escalate=true we always notify the master.
+        # Distinguish two cases by the LLM's own reply:
+        #
+        #   * empty/whitespace reply → cancel/reschedule intent, per the
+        #     prompt rule. Silence the bot and flip to HUMAN_TAKEOVER so
+        #     the master handles it themselves (saves more bookings than
+        #     a bot reply would).
+        #
+        #   * non-empty reply (e.g. «уточню у мастера и вернусь») →
+        #     unknown question. Send the reply to the client AND DM the
+        #     master, but don't silence the bot — the client may still
+        #     have follow-up questions answerable from the KB.
+        if result.escalate:
+            from app.services.escalate import escalate_to_master
+
+            reply_lower = (reply_text or "").strip().lower()
+            # «Передам мастеру» / «передам ему» = handoff for cancel /
+            # reschedule — bot stays silent. «Уточню у мастера» /
+            # «вернусь с ответом» = unknown-question — bot keeps the
+            # «уточню» reply in the chat and master gets a soft DM.
+            is_cancel_handoff = (
+                not reply_lower
+                or "передам" in reply_lower
+                or "перенесу" in reply_lower
+                or "сообщ" in reply_lower and "мастер" in reply_lower
+            )
+            if is_cancel_handoff:
+                await escalate_to_master(
+                    session,
+                    master=master,
+                    conversation=conversation,
+                    client_message=user_text,
+                    reason="cancel_request",
+                    silence_bot=True,
+                )
+                meta["escalated"] = True
+                meta["silent"] = True
+            else:
+                await escalate_to_master(
+                    session,
+                    master=master,
+                    conversation=conversation,
+                    client_message=user_text,
+                    reason="unknown_question",
+                    silence_bot=False,
+                )
+                meta["escalated"] = True
+
         # Dispatch declared actions. Each action runs against the same session
         # and contributes notes back into meta (e.g. booking_id).
         if actions:
@@ -303,6 +369,189 @@ async def process_client_message(
     session.add(out)
     await session.flush()
     return out
+
+
+# --------------------------------------------------------- hybrid overrides
+
+
+async def _apply_hybrid_overrides(
+    *,
+    session: AsyncSession,
+    master: Master,
+    conversation: Conversation,
+    actions: list[dict[str, Any]],
+    meta: dict[str, Any],
+    collected: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """In hybrid mode, replace certain LLM-text moments with button widgets.
+
+    Mutates `meta` to add `meta["hybrid"]` describing which widget the
+    business handler should render in place of its default keyboard
+    (or alongside the LLM reply text).
+
+    Returns a possibly-filtered `actions` list — `create_booking` is
+    pulled out and held in flow_state until the client taps Confirm,
+    so the booking only lands after explicit consent.
+    """
+    from app.bot.flow.state import FlowState
+    from app.models import ServiceAddon
+
+    state = FlowState.from_dict(conversation.flow_state)
+
+    # Pull service_id from the LLM's collected first so later checks see it.
+    if collected.get("service_id"):
+        try:
+            sv = int(collected["service_id"])
+            if sv != state.service_id:
+                state.service_id = sv
+                # Service just changed — addon-offer status no longer
+                # applies (different service, possibly different addons).
+                state.hybrid_addons_offered = False
+                state.addon_ids = []
+        except (TypeError, ValueError):
+            pass
+
+    # 1. Defer create_booking → confirm widget. Highest priority.
+    cb_action = next(
+        (a for a in actions if a.get("type") == "create_booking"), None
+    )
+    if cb_action is not None:
+        actions = [a for a in actions if a.get("type") != "create_booking"]
+        if cb_action.get("service_id"):
+            try:
+                state.service_id = int(cb_action["service_id"])
+            except (TypeError, ValueError):
+                pass
+        addon_ids_in = cb_action.get("addon_ids") or []
+        try:
+            state.addon_ids = [
+                int(x) for x in addon_ids_in
+                if isinstance(x, (int, str)) and str(x).isdigit()
+            ]
+        except Exception:
+            state.addon_ids = []
+        state.starts_at = cb_action.get("starts_at")
+        state.pending_booking = {
+            "service_id": state.service_id,
+            "addon_ids": state.addon_ids,
+            "starts_at": state.starts_at,
+            "client_name": cb_action.get("client_name"),
+            "client_phone": cb_action.get("client_phone"),
+        }
+        state.step = "confirm"
+        meta["hybrid"] = {"widget": "confirm"}
+        conversation.flow_state = state.to_dict()
+        return actions
+
+    # 2. find_slots emitted with a concrete day → time slot buttons.
+    # This MUST be checked before the addons widget — otherwise the
+    # addons widget always wins on the turn the LLM finds slots, even
+    # when the addon step was already resolved earlier in the dialog.
+    fs_action = next(
+        (a for a in actions if a.get("type") == "find_slots"), None
+    )
+    has_find_slots = fs_action is not None
+    intent_iso = collected.get("intent_starts_at") or collected.get("starts_at")
+    day_iso: str | None = None
+    if fs_action is not None and fs_action.get("from_date"):
+        try:
+            day_iso = str(fs_action["from_date"])
+            date.fromisoformat(day_iso)
+        except Exception:
+            day_iso = None
+    if day_iso is None and intent_iso:
+        try:
+            day_iso = datetime.fromisoformat(str(intent_iso)).astimezone(
+                _master_tz_obj(master)
+            ).date().isoformat()
+        except Exception:
+            day_iso = None
+    if has_find_slots and state.service_id and day_iso:
+        state.day = day_iso
+        state.step = "time"
+        # find_slots fired ⇒ addon step is implicitly past, even if we
+        # never explicitly recorded it.
+        state.hybrid_addons_offered = True
+        meta["hybrid"] = {"widget": "time", "day": day_iso}
+        conversation.flow_state = state.to_dict()
+        return actions
+
+    # 3. Service just picked (collected.service_id) + has addons + addons
+    # not yet seen in history → render addons multiselect once.
+    if (
+        state.service_id is not None
+        and not state.hybrid_addons_offered
+        and not await _history_mentions_addons(session, conversation)
+    ):
+        addons = (
+            await session.execute(
+                select(ServiceAddon).where(
+                    ServiceAddon.service_id == state.service_id
+                )
+            )
+        ).scalars().all()
+        if addons:
+            state.hybrid_addons_offered = True
+            state.step = "addons"
+            meta["hybrid"] = {
+                "widget": "addons",
+                "service_id": state.service_id,
+            }
+            conversation.flow_state = state.to_dict()
+            return actions
+
+    conversation.flow_state = state.to_dict()
+    return actions
+
+
+async def _history_mentions_addons(
+    session: AsyncSession, conversation: Conversation
+) -> bool:
+    """Cheap check: did the conversation already cover the addons step?
+
+    Looks at the last 6 messages for «без добавок», «выберите добавки»
+    and similar phrases that indicate the addon picker has already
+    been presented or answered. Used to avoid re-offering the addons
+    widget on every turn after the service is set.
+    """
+    rows = (
+        (
+            await session.execute(
+                select(Message.text)
+                .where(Message.conversation_id == conversation.id)
+                .order_by(Message.id.desc())
+                .limit(6)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for raw in rows:
+        text = (raw or "").lower()
+        if not text:
+            continue
+        if "без добав" in text or "без покрыт" in text:
+            return True
+        if any(
+            tag in text
+            for tag in (
+                "хотите что-то добавить",
+                "хотите добавить",
+                "добавки:",
+                "выберите добавки",
+            )
+        ):
+            return True
+    return False
+
+
+def _master_tz_obj(master: Master):
+    from zoneinfo import ZoneInfo
+
+    try:
+        return ZoneInfo(master.timezone)
+    except Exception:
+        return ZoneInfo("Europe/Moscow")
 
 
 # ----------------------------------------------------------- prompt assembly

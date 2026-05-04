@@ -53,14 +53,21 @@ async def find_available_slots(
     from_date: date,
     days_ahead: int = 7,
     grid_minutes: int = SLOT_GRID_MINUTES,
+    extra_minutes: int = 0,
 ) -> SlotSearchResult:
+    """Find slots for `service` in the next `days_ahead` days.
+
+    `extra_minutes` extends the slot duration to account for selected
+    add-ons so the button-only funnel doesn't offer slots that are too
+    short once add-ons are applied.
+    """
     if service.master_id != master.id:
         raise ValueError("service does not belong to master")
     if not service.is_active:
         return SlotSearchResult([], None)
 
     tz = _master_tz(master)
-    duration = timedelta(minutes=service.duration_minutes)
+    duration = timedelta(minutes=service.duration_minutes + max(0, extra_minutes))
 
     days = [from_date + timedelta(days=i) for i in range(days_ahead)]
 

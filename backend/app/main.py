@@ -9,6 +9,13 @@ from app.api.miniapp import router as miniapp_router
 from app.api.telegram import router as telegram_router
 from app.core.config import settings
 
+# Honour LOG_LEVEL from .env so INFO-level lifecycle and worker messages
+# actually surface in `docker logs` instead of being filtered out by
+# Python's default WARNING threshold.
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 log = logging.getLogger(__name__)
 
 ALLOWED_UPDATES = [

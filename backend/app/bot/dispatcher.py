@@ -36,10 +36,13 @@ def get_bot() -> Bot:
 def get_dispatcher() -> Dispatcher:
     global _dp
     if _dp is None:
-        from app.bot.handlers import business, master_commands
+        from app.bot.handlers import business, business_buttons, master_commands
 
         _dp = Dispatcher()
         _dp.include_router(master_commands.router)
+        # business_buttons must come BEFORE business so its bk:*/ask:*/noop
+        # callback_query handlers win the routing over business.on_choice_tap.
+        _dp.include_router(business_buttons.router)
         _dp.include_router(business.router)
     return _dp
 
